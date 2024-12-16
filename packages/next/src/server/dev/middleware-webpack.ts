@@ -10,6 +10,7 @@ import { getSourceMapFromFile } from './get-source-map-from-file'
 import { openFileInEditor } from '../../next-devtools/server/launch-editor'
 import {
   getOriginalCodeFrame,
+  ignoreListAnonymousStackFramesIfSandwiched,
   type OriginalStackFrameResponse,
   type OriginalStackFramesRequest,
   type OriginalStackFramesResponse,
@@ -355,7 +356,7 @@ async function getSource(
   return undefined
 }
 
-function getOriginalStackFrames({
+async function getOriginalStackFrames({
   isServer,
   isEdgeServer,
   isAppDirectory,
@@ -374,7 +375,7 @@ function getOriginalStackFrames({
   edgeServerStats: () => webpack.Stats | null
   rootDirectory: string
 }): Promise<OriginalStackFramesResponse> {
-  return Promise.all(
+  const frameResponses = await Promise.all(
     frames.map(
       (frame): Promise<OriginalStackFramesResponse[number]> =>
         getOriginalStackFrame({
@@ -402,6 +403,10 @@ function getOriginalStackFrames({
         )
     )
   )
+
+  ignoreListAnonymousStackFramesIfSandwiched(frameResponses)
+
+  return frameResponses
 }
 
 async function getOriginalStackFrame({

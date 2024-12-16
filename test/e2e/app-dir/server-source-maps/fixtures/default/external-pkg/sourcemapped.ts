@@ -4,3 +4,17 @@ type Fn<T> = () => T
 export function runExternalSourceMapped<T>(fn: Fn<T>): T {
   return fn()
 }
+
+export function runSetOfSets(setOfSets: Set<Set<Fn<any>>>): void {
+  setOfSets.forEach((set) => {
+    set.forEach((fn) => {
+      fn()
+    })
+  })
+}
+
+export function runHiddenSetOfSets(): void {
+  runSetOfSets(
+    new Set([new Set([() => console.error(new Error('ignore-listed frames'))])])
+  )
+}

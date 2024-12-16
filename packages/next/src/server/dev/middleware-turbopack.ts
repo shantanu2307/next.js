@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http'
 import {
   getOriginalCodeFrame,
+  ignoreListAnonymousStackFramesIfSandwiched,
   type OriginalStackFrameResponse,
   type OriginalStackFramesRequest,
   type OriginalStackFramesResponse,
@@ -425,6 +426,8 @@ export function getOverlayMiddleware({
           }
         })
       )
+
+      ignoreListAnonymousStackFramesIfSandwiched(result)
 
       return middlewareResponse.json(res, result)
     } else if (pathname === '/__nextjs_launch-editor') {

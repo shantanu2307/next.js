@@ -434,4 +434,41 @@ describe('app-dir - server source maps', () => {
       }
     }
   })
+
+  it('ignore-lists anonymous rsc stack frame sandwiches', async () => {
+    if (isNextDev) {
+      const outputIndex = next.cliOutput.length
+      const browser = await next.browser('/rsc-anonymous-stack-frame-sandwich')
+
+      if (isTurbopack) {
+        await expect(browser).toDisplayCollapsedRedbox()
+      } else {
+        await expect(browser).toDisplayCollapsedRedbox()
+      }
+
+      expect(normalizeCliOutput(next.cliOutput.slice(outputIndex))).toContain(
+        ''
+      )
+    } else {
+      expect(normalizeCliOutput(next.cliOutput)).toContain('')
+    }
+  })
+  it('ignore-lists anonymous ssr stack frame sandwiches', async () => {
+    if (isNextDev) {
+      const outputIndex = next.cliOutput.length
+      const browser = await next.browser('/ssr-anonymous-stack-frame-sandwich')
+
+      if (isTurbopack) {
+        await expect(browser).toDisplayCollapsedRedbox()
+      } else {
+        await expect(browser).toDisplayCollapsedRedbox()
+      }
+
+      expect(normalizeCliOutput(next.cliOutput.slice(outputIndex))).toContain(
+        ''
+      )
+    } else {
+      expect(normalizeCliOutput(next.cliOutput)).toContain('')
+    }
+  })
 })
