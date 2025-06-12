@@ -21,6 +21,7 @@ use turbopack_ecmascript::chunk::EcmascriptChunkType;
 use turbopack_node::execution_context::ExecutionContext;
 
 use crate::{
+    app_structure::CollectedRootParams,
     mode::NextMode,
     next_config::NextConfig,
     next_font::local::NextFontLocalResolvePlugin,
@@ -109,6 +110,7 @@ pub async fn get_edge_resolve_options_context(
     mode: Vc<NextMode>,
     next_config: Vc<NextConfig>,
     execution_context: Vc<ExecutionContext>,
+    collected_root_params: Option<Vc<CollectedRootParams>>,
 ) -> Result<Vc<ResolveOptionsContext>> {
     let next_edge_import_map = get_next_edge_import_map(
         *project_path,
@@ -116,6 +118,7 @@ pub async fn get_edge_resolve_options_context(
         next_config,
         mode,
         execution_context,
+        collected_root_params,
     )
     .to_resolved()
     .await?;
