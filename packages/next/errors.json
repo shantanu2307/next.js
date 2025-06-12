@@ -713,5 +713,10 @@
   "712": "`rspack.warnForEdgeRuntime` is not supported by the wasm bindings.",
   "713": "Unexpected error during process lookup",
   "714": "cannot run loadNative when `NEXT_TEST_WASM` is set",
-  "715": "Server Action \"%s\" was not found on the server. \\nRead more: https://nextjs.org/docs/messages/failed-to-find-server-action"
+  "715": "Server Action \"%s\" was not found on the server. \\nRead more: https://nextjs.org/docs/messages/failed-to-find-server-action",
+  "716": "Route %s used %s inside \\`\"use cache\"\\` or \\`unstable_cache\\`. Support for this API inside cache scopes is planned for a future version of Next.js.",
+  "717": "%s must not be used within a client component. Next.js should be preventing it from being included in client components statically, but did not in this case.",
+  "718": "Route %s used %s in Pages Router. This API is only available within App Router.",
+  "719": "\\`unstable_rootParams\\` must not be used within a client component. Next.js should be preventing it from being included in client components statically, but did not in this case.",
+  "720": "Missing workStore in %s"
 }
