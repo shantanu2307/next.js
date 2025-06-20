@@ -1,8 +1,10 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { css } from '../../../../utils/css'
 
 const ERROR_DELAY_MS = 180
 const SUCCESS_DELAY_MS = 1000
+
+const modifierKeys = ['Meta', 'Control', 'Ctrl', 'Alt', 'Option', 'Shift']
 
 export function ShortcutRecorder({
   value,
@@ -16,15 +18,6 @@ export function ShortcutRecorder({
   const [success, setSuccess] = useState<boolean>(false)
   const timeoutRef = useRef<number | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-
-  const modifierKeys = new Set([
-    'Meta',
-    'Control',
-    'Ctrl',
-    'Alt',
-    'Option',
-    'Shift',
-  ])
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Tab') return
@@ -46,13 +39,14 @@ export function ShortcutRecorder({
     e.preventDefault()
 
     setKeys((prev) => {
-      // Check if the pressed key is NOT a modifier key
-      const isNonModifier = !modifierKeys.has(e.key)
+      // Don't add duplicate keys
+      if (prev.includes(e.key)) return prev
 
-      if (isNonModifier) {
-        // Find existing non-modifier key in the array and replace it
+      // Handle non-modifier keys (action keys)
+      if (!modifierKeys.includes(e.key)) {
+        // Replace existing non-modifier key if present
         const existingNonModifierIndex = prev.findIndex(
-          (key) => !modifierKeys.has(key)
+          (key) => !modifierKeys.includes(key)
         )
         if (existingNonModifierIndex !== -1) {
           const next = [...prev]
@@ -60,24 +54,35 @@ export function ShortcutRecorder({
           handleValidation(next)
           return next
         }
+        // Add new non-modifier key at the end
+        const next = [...prev, e.key]
+        handleValidation(next)
+        return next
       }
 
-      // If it's a modifier key or no existing non-modifier found, add as normal
-      if (prev.includes(e.key)) return prev
+      // Handle modifier keys
+      const next = [...prev]
 
-      let next: string[]
-      if (modifierKeys.has(e.key)) {
-        // Reorder modifier keys to be first in the array
-        const modifiers = [
-          e.key,
-          ...prev.filter((key) => modifierKeys.has(key)),
-        ]
-        const nonModifiers = prev.filter((key) => !modifierKeys.has(key))
-        next = [...modifiers, ...nonModifiers]
-      } else {
-        next = [...prev, e.key]
+      // Find the correct position for the modifier key based on predefined order
+      const keyOrderIndex = modifierKeys.indexOf(e.key)
+      let insertIndex = 0
+
+      // Find where to insert by checking existing modifier keys
+      for (let i = 0; i < next.length; i++) {
+        if (modifierKeys.includes(next[i])) {
+          const existingOrderIndex = modifierKeys.indexOf(next[i])
+          if (keyOrderIndex < existingOrderIndex) {
+            insertIndex = i
+            break
+          }
+          insertIndex = i + 1
+        } else {
+          // Stop at first non-modifier key
+          break
+        }
       }
 
+      next.splice(insertIndex, 0, e.key)
       handleValidation(next)
       return next
     })
@@ -155,17 +160,13 @@ function BottomArrow() {
   )
 }
 
-type KbdProps = {
-  children: string
-}
-
-function Kbd({ children }: KbdProps) {
-  // Map event.key to symbol or label
+function Kbd({ children }: { children: string }) {
   function renderKey(key: string) {
     switch (key) {
       case 'Meta':
-        // Command symbol (⌘)
-        return '⌘'
+        // Command symbol (⌘) on macOS
+        // On non-macOS, shows "Ctrl"
+        return <MetaKey />
       case 'Alt':
       case 'Option':
         // Option symbol (⌥)
@@ -210,8 +211,33 @@ function Kbd({ children }: KbdProps) {
     }
   }
   const key = renderKey(children)
-  const isSymbol = key.length === 1
+  const isSymbol = typeof key === 'string' ? key.length === 1 : false
   return <kbd data-symbol={isSymbol}>{key}</kbd>
+}
+
+function MetaKey() {
+  // u00A0 = &nbsp;
+  const [label, setLabel] = useState('\u00A0')
+
+  const apple = isApple()
+
+  useEffect(() => {
+    // Meta is Command on Apple devices, otherwise Control
+    if (apple === true) {
+      setLabel('⌘')
+    }
+
+    // Explicitly say "Ctrl" instead of the symbol "⌃"
+    // because most Windows/Linux laptops do not print the symbol
+    // Other keyboard-intensive apps like Linear do this
+    if (apple === false) {
+      setLabel('Ctrl')
+    }
+  }, [apple])
+
+  return (
+    <span style={{ minWidth: '1em', display: 'inline-block' }}>{label}</span>
+  )
 }
 
 function IconCross() {
@@ -383,3 +409,36 @@ export const SHORTCUT_RECORDER_STYLES = css`
     }
   }
 `
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+function testPlatform(re: RegExp): boolean | undefined {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Checking on an unusual environment.
+  return typeof window !== 'undefined' && window.navigator != null
+    ? re.test(window.navigator.platform)
+    : undefined
+}
+
+export function isMac(): boolean | undefined {
+  return testPlatform(/^Mac/)
+}
+
+export function isIPhone(): boolean | undefined {
+  return testPlatform(/^iPhone/)
+}
+
+export function isIPad(): boolean | undefined {
+  return (
+    testPlatform(/^iPad/) ||
+    // iPadOS 13 lies and says it's a Mac, but we can distinguish by detecting touch support.
+    (isMac() && navigator.maxTouchPoints > 1)
+  )
+}
+
+export function isIOS(): boolean | undefined {
+  return isIPhone() || isIPad()
+}
+
+export function isApple(): boolean | undefined {
+  return isMac() || isIPhone() || isIPad()
+}
