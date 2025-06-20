@@ -20,6 +20,8 @@ export function UserPreferences({
   hide,
   scale,
   setScale,
+  hideShortcut,
+  setHideShortcut,
   ...props
 }: {
   setPosition: (position: DevToolsIndicatorPosition) => void
@@ -27,6 +29,8 @@ export function UserPreferences({
   scale: DevToolsScale
   setScale: (value: DevToolsScale) => void
   hide: () => void
+  hideShortcut: string
+  setHideShortcut: (value: string) => void
 } & DevToolsInfoPropsCore &
   Omit<HTMLProps<HTMLDivElement>, 'size'>) {
   // derive initial theme from system preference
@@ -177,7 +181,10 @@ export function UserPreferences({
             </p>
           </div>
           <div className="preference-control">
-            <ShortcutRecorder />
+            <ShortcutRecorder
+              value={hideShortcut.split('+')}
+              onChange={setHideShortcut}
+            />
           </div>
         </div>
 
@@ -337,6 +344,7 @@ export const DEV_TOOLS_INFO_USER_PREFERENCES_STYLES = css`
     font-size: var(--size-14);
     color: var(--color-gray-1000);
     padding: 6px 8px;
+    transition: border-color 150ms var(--timing-swift);
 
     &:hover {
       border-color: var(--color-gray-500);
@@ -387,6 +395,7 @@ export const DEV_TOOLS_INFO_USER_PREFERENCES_STYLES = css`
       font-size: var(--size-14);
       color: var(--color-gray-1000);
       padding: 6px 8px;
+      transition: border-color 150ms var(--timing-swift);
 
       &:hover {
         border-color: var(--color-gray-500);
@@ -480,17 +489,22 @@ export const DEV_TOOLS_INFO_USER_PREFERENCES_STYLES = css`
     bottom: calc(100% + var(--gap));
     text-align: center;
     opacity: 0;
+    scale: 0.96;
     user-select: none;
     text-wrap: pretty;
-    transition: opacity 150ms var(--timing-swift);
+    transition:
+      opacity 150ms var(--timing-swift),
+      scale 150ms var(--timing-swift);
 
     &[data-show='true'] {
       opacity: 1;
+      scale: 1;
     }
 
     &[data-error='true'] {
       --background: var(--color-red-800);
       color: white;
+      width: 180px;
     }
 
     svg {
@@ -532,9 +546,18 @@ function ChevronDownIcon() {
   )
 }
 
-function ShortcutRecorder() {
+const ERROR_DELAY_MS = 180
+const SUCCESS_DELAY_MS = 1000
+
+function ShortcutRecorder({
+  value,
+  onChange,
+}: {
+  value: string[] | null
+  onChange: (value: string) => void
+}) {
   const [show, setShow] = useState(false)
-  const [keys, setKeys] = useState<string[]>([])
+  const [keys, setKeys] = useState<string[]>(value ?? [])
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<boolean>(false)
   const timeoutRef = useRef<number | null>(null)
@@ -558,7 +581,7 @@ function ShortcutRecorder() {
     if (keys_.length === 0) {
       message = null
     } else if (modifiers.length > 0 && nonModifiers.length === 0) {
-      message = 'Shortcut must include another key'
+      message = 'Shortcut must include a non-modifier key'
     } else if (modifiers.length === 0) {
       message = 'Shortcut must start with a modifier key'
     } else {
@@ -579,13 +602,14 @@ function ShortcutRecorder() {
         setError(invalid)
         if (!invalid && next.length > 0) {
           setSuccess(true)
+          onChange(next.join('+'))
           timeoutRef.current = window.setTimeout(() => {
             setShow(false)
-          }, 1000)
+          }, SUCCESS_DELAY_MS)
         } else {
           setSuccess(false)
         }
-      }, 100)
+      }, ERROR_DELAY_MS)
     }
 
     if (e.key === 'Backspace') {
@@ -620,7 +644,6 @@ function ShortcutRecorder() {
 
   function onBlur() {
     if (error) setKeys([])
-    setError(null)
     setSuccess(false)
     setShow(false)
   }
@@ -658,6 +681,7 @@ function ShortcutRecorder() {
         className="shortcut-recorder-tooltip"
         data-show={show}
         data-error={Boolean(error)}
+        onTransitionEnd={() => setError(null)}
       >
         <div className="shortcut-recorder-status">
           {!error && (

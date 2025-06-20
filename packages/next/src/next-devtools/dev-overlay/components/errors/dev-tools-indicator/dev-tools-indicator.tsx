@@ -24,6 +24,7 @@ import {
 } from './utils'
 import {
   getInitialPosition,
+  useHideShortcutStorage,
   type DevToolsScale,
 } from './dev-tools-info/preferences'
 import { Draggable } from './draggable'
@@ -91,6 +92,41 @@ export type Overlays = (typeof OVERLAYS)[keyof typeof OVERLAYS]
 
 const INDICATOR_PADDING = 20
 
+function useShortcuts(shortcuts: Record<string, () => void>) {
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const keys = []
+
+      if (e.metaKey) keys.push('Meta')
+      if (e.ctrlKey) keys.push('Control')
+      if (e.altKey) keys.push('Alt')
+      if (e.shiftKey) keys.push('Shift')
+
+      // Add the actual key pressed
+      if (
+        e.key !== 'Meta' &&
+        e.key !== 'Control' &&
+        e.key !== 'Alt' &&
+        e.key !== 'Shift'
+      ) {
+        keys.push(e.key)
+      }
+
+      const shortcut = keys.join('+')
+
+      console.log({ shortcut })
+
+      if (shortcuts[shortcut]) {
+        e.preventDefault()
+        shortcuts[shortcut]()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [shortcuts])
+}
+
 function DevToolsPopover({
   routerType,
   disabled,
@@ -122,9 +158,10 @@ function DevToolsPopover({
   const menuRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
 
-  const [open, setOpen] = useState<Overlays | null>(null)
+  const [open, setOpen] = useState<Overlays | null>(OVERLAYS.Preferences)
   const [position, setPosition] = useState(getInitialPosition())
   const [selectedIndex, setSelectedIndex] = useState(-1)
+  const [hideShortcut, setHideShortcut] = useHideShortcutStorage()
 
   const isMenuOpen = open === OVERLAYS.Root
   const isTurbopackInfoOpen = open === OVERLAYS.Turbo
@@ -145,6 +182,12 @@ function DevToolsPopover({
   // Features to make the menu accessible
   useFocusTrap(menuRef, triggerRef, isMenuOpen)
   useClickOutside(menuRef, triggerRef, isMenuOpen, closeMenu)
+
+  console.log(hideShortcut)
+
+  useShortcuts({
+    [hideShortcut]: () => console.log('Hi'),
+  })
 
   useEffect(() => {
     if (open === null) {
@@ -334,6 +377,8 @@ function DevToolsPopover({
         position={position}
         scale={scale}
         setScale={setScale}
+        hideShortcut={hideShortcut}
+        setHideShortcut={setHideShortcut}
       />
 
       {/* Page Segment Explorer */}

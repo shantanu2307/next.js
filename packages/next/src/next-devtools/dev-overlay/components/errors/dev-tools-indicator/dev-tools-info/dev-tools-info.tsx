@@ -98,7 +98,6 @@ export const DEV_TOOLS_INFO_STYLES = `
     position: absolute;
     font-family: var(--font-stack-sans);
     z-index: 1000;
-    overflow: hidden;
     opacity: 0;
     outline: 0;
     min-width: 350px;
