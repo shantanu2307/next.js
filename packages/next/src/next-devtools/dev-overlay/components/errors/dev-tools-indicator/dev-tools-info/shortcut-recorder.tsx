@@ -13,7 +13,6 @@ export function ShortcutRecorder({
 }) {
   const [show, setShow] = useState(false)
   const [keys, setKeys] = useState<string[]>(value ?? [])
-  const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<boolean>(false)
   const timeoutRef = useRef<number | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -27,23 +26,6 @@ export function ShortcutRecorder({
     'Shift',
   ])
 
-  function validate(keys_: string[]) {
-    const modifiers = keys_.filter((key) => modifierKeys.has(key))
-    const nonModifiers = keys_.filter((key) => !modifierKeys.has(key))
-
-    let message: string | null = null
-
-    if (keys_.length === 0) {
-      message = null
-    } else if (modifiers.length > 0 && nonModifiers.length === 0) {
-      message = 'Shortcut must include a non-modifier key'
-    } else {
-      message = null
-    }
-
-    return message
-  }
-
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Tab') return
     if (e.key === 'Tab' && e.shiftKey) return
@@ -51,17 +33,11 @@ export function ShortcutRecorder({
 
     function handleValidation(next: string[]) {
       timeoutRef.current = window.setTimeout(() => {
-        const invalid = validate(next)
-        setError(invalid)
-        if (!invalid && next.length > 0) {
-          setSuccess(true)
-          onChange(next.join('+'))
-          timeoutRef.current = window.setTimeout(() => {
-            setShow(false)
-          }, SUCCESS_DELAY_MS)
-        } else {
-          setSuccess(false)
-        }
+        setSuccess(true)
+        onChange(next.join('+'))
+        timeoutRef.current = window.setTimeout(() => {
+          setShow(false)
+        }, SUCCESS_DELAY_MS)
       }, ERROR_DELAY_MS)
     }
 
@@ -110,12 +86,10 @@ export function ShortcutRecorder({
   function clear() {
     inputRef.current?.focus()
     setKeys([])
-    setError(null)
     setSuccess(false)
   }
 
   function onBlur() {
-    if (error) setKeys([])
     setSuccess(false)
     setShow(false)
   }
@@ -150,20 +124,13 @@ export function ShortcutRecorder({
           </button>
         )}
       </div>
-      <div
-        className="shortcut-recorder-tooltip"
-        data-show={show}
-        data-error={Boolean(error)}
-        onTransitionEnd={() => setError(null)}
-      >
+      <div className="shortcut-recorder-tooltip" data-show={show}>
         <div className="shortcut-recorder-status">
-          {!error && (
-            <div
-              className="shortcut-recorder-status-icon"
-              data-success={success}
-            />
-          )}
-          {error ? error : success ? 'Shortcut set' : 'Recording'}
+          <div
+            className="shortcut-recorder-status-icon"
+            data-success={success}
+          />
+          {success ? 'Shortcut set' : 'Recording'}
         </div>
         <BottomArrow />
       </div>
@@ -281,10 +248,14 @@ export const SHORTCUT_RECORDER_STYLES = css`
 
       &[data-has-shortcut='true'] {
         border: 1px solid var(--color-gray-400);
+
+        &:hover {
+          border-color: var(--color-gray-500);
+        }
       }
 
       &:hover {
-        border-color: var(--color-gray-500);
+        border-color: var(--color-gray-600);
       }
 
       &::placeholder {
@@ -385,12 +356,6 @@ export const SHORTCUT_RECORDER_STYLES = css`
     &[data-show='true'] {
       opacity: 1;
       scale: 1;
-    }
-
-    &[data-error='true'] {
-      --background: var(--color-red-800);
-      color: white;
-      width: 180px;
     }
 
     svg {
