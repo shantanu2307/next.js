@@ -28,6 +28,7 @@ import {
   type DevToolsScale,
 } from './dev-tools-info/preferences'
 import { Draggable } from './draggable'
+import { useShortcuts } from '../../../hooks/use-shortcuts'
 
 // TODO: add E2E tests to cover different scenarios
 
@@ -62,6 +63,9 @@ export function DevToolsIndicator({
           method: 'POST',
         })
       }}
+      toggleVisibility={() => {
+        setIsDevToolsIndicatorVisible(!isDevToolsIndicatorVisible)
+      }}
       isTurbopack={!!process.env.TURBOPACK}
       disabled={state.disableDevIndicator || !isDevToolsIndicatorVisible}
       isBuildError={isBuildError}
@@ -92,41 +96,6 @@ export type Overlays = (typeof OVERLAYS)[keyof typeof OVERLAYS]
 
 const INDICATOR_PADDING = 20
 
-function useShortcuts(shortcuts: Record<string, () => void>) {
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      const keys = []
-
-      if (e.metaKey) keys.push('Meta')
-      if (e.ctrlKey) keys.push('Control')
-      if (e.altKey) keys.push('Alt')
-      if (e.shiftKey) keys.push('Shift')
-
-      // Add the actual key pressed
-      if (
-        e.key !== 'Meta' &&
-        e.key !== 'Control' &&
-        e.key !== 'Alt' &&
-        e.key !== 'Shift'
-      ) {
-        keys.push(e.key)
-      }
-
-      const shortcut = keys.join('+')
-
-      console.log({ shortcut })
-
-      if (shortcuts[shortcut]) {
-        e.preventDefault()
-        shortcuts[shortcut]()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [shortcuts])
-}
-
 function DevToolsPopover({
   routerType,
   disabled,
@@ -137,6 +106,7 @@ function DevToolsPopover({
   isTurbopack,
   isBuildError,
   hide,
+  toggleVisibility,
   dispatch,
   scale,
   setScale,
@@ -151,6 +121,7 @@ function DevToolsPopover({
   isTurbopack: boolean
   isBuildError: boolean
   hide: () => void
+  toggleVisibility: () => void
   dispatch: OverlayDispatch
   scale: DevToolsScale
   setScale: (value: DevToolsScale) => void
@@ -183,11 +154,12 @@ function DevToolsPopover({
   useFocusTrap(menuRef, triggerRef, isMenuOpen)
   useClickOutside(menuRef, triggerRef, isMenuOpen, closeMenu)
 
-  console.log(hideShortcut)
-
-  useShortcuts({
-    [hideShortcut]: () => console.log('Hi'),
-  })
+  useShortcuts(
+    {
+      [hideShortcut || '']: hideDevTools,
+    },
+    triggerRef
+  )
 
   useEffect(() => {
     if (open === null) {
@@ -198,6 +170,11 @@ function DevToolsPopover({
       return () => clearTimeout(id)
     }
   }, [open])
+
+  function hideDevTools() {
+    toggleVisibility()
+    setOpen(null)
+  }
 
   function select(index: number | 'first' | 'last') {
     if (index === 'first') {
