@@ -2,9 +2,8 @@ use std::sync::LazyLock;
 
 use anyhow::Result;
 use rustc_hash::FxHashMap;
-use serde::{Deserialize, Serialize};
 use turbo_rcstr::{RcStr, rcstr};
-use turbo_tasks::{NonLocalValue, ResolvedVc, TaskInput, Vc, trace::TraceRawVcs};
+use turbo_tasks::{ResolvedVc, Vc};
 use turbo_tasks_fs::{FileSystemPath, glob::Glob};
 use turbopack_core::{
     diagnostics::DiagnosticExt,
@@ -96,17 +95,6 @@ impl Issue for InvalidImportModuleIssue {
     }
 }
 
-#[derive(
-    PartialEq, Eq, Debug, Clone, Serialize, Deserialize, TaskInput, TraceRawVcs, NonLocalValue, Hash,
-)]
-pub(crate) enum InvalidImportPattern {
-    /// Match a package name like `"next"` (no subpaths allowed).
-    /// Compared against the `module` field of [`turbopack_core::resolve::parse::Request::Module`]
-    Module(RcStr),
-    /// Match any glob, or a specifier like `"next/foobar"` that `Module` doesn't allow.
-    Glob(RcStr),
-}
-
 /// A resolver plugin emits an error when specific context imports
 /// specified import requests. It doesn't detect if the import is correctly
 /// alised or not unlike webpack-config does; Instead it should be correctly
@@ -114,7 +102,7 @@ pub(crate) enum InvalidImportPattern {
 #[turbo_tasks::value]
 pub(crate) struct InvalidImportResolvePlugin {
     root: ResolvedVc<FileSystemPath>,
-    invalid_import: InvalidImportPattern,
+    invalid_import: RcStr,
     message: Vec<RcStr>,
 }
 
@@ -123,7 +111,7 @@ impl InvalidImportResolvePlugin {
     #[turbo_tasks::function]
     pub fn new(
         root: ResolvedVc<FileSystemPath>,
-        invalid_import: InvalidImportPattern,
+        invalid_import: RcStr,
         message: Vec<RcStr>,
     ) -> Vc<Self> {
         InvalidImportResolvePlugin {
@@ -139,14 +127,7 @@ impl InvalidImportResolvePlugin {
 impl BeforeResolvePlugin for InvalidImportResolvePlugin {
     #[turbo_tasks::function]
     fn before_resolve_condition(&self) -> Vc<BeforeResolvePluginCondition> {
-        match &self.invalid_import {
-            InvalidImportPattern::Module(module) => {
-                BeforeResolvePluginCondition::from_modules(Vc::cell(vec![module.clone()]))
-            }
-            InvalidImportPattern::Glob(glob) => {
-                BeforeResolvePluginCondition::from_request_glob(Glob::new(glob.clone()))
-            }
-        }
+        BeforeResolvePluginCondition::from_modules(Vc::cell(vec![self.invalid_import.clone()]))
     }
 
     #[turbo_tasks::function]
@@ -159,12 +140,8 @@ impl BeforeResolvePlugin for InvalidImportResolvePlugin {
         InvalidImportModuleIssue {
             file_path: lookup_path,
             messages: self.message.clone(),
-            // FIXME: this should be controlled by a flag, not a special case for one package
             // styled-jsx specific resolve error has its own message
-            skip_context_message: match &self.invalid_import {
-                InvalidImportPattern::Module(module) => module == "styled-jsx",
-                _ => false,
-            },
+            skip_context_message: self.invalid_import == "styled-jsx",
         }
         .resolved_cell()
         .emit();
@@ -183,7 +160,7 @@ pub(crate) fn get_invalid_client_only_resolve_plugin(
 ) -> Vc<InvalidImportResolvePlugin> {
     InvalidImportResolvePlugin::new(
         *root,
-        InvalidImportPattern::Module("client-only".into()),
+        "client-only".into(),
         vec![
             "'client-only' cannot be imported from a Server Component module. It should only be \
              used from a Client Component."
@@ -200,7 +177,7 @@ pub(crate) fn get_invalid_server_only_resolve_plugin(
 ) -> Vc<InvalidImportResolvePlugin> {
     InvalidImportResolvePlugin::new(
         *root,
-        InvalidImportPattern::Module("server-only".into()),
+        "server-only".into(),
         vec![
             "'server-only' cannot be imported from a Client Component module. It should only be \
              used from a Server Component."
@@ -215,7 +192,7 @@ pub(crate) fn get_invalid_styled_jsx_resolve_plugin(
 ) -> Vc<InvalidImportResolvePlugin> {
     InvalidImportResolvePlugin::new(
         *root,
-        InvalidImportPattern::Module("styled-jsx".into()),
+        "styled-jsx".into(),
         vec![
             "'styled-jsx' cannot be imported from a Server Component module. It should only be \
              used from a Client Component."
