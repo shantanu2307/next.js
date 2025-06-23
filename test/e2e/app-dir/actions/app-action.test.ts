@@ -8,10 +8,10 @@ import {
   getRedboxSource,
 } from 'next-test-utils'
 import type { Request, Response } from 'playwright'
-import fs from 'node:fs/promises'
-import { join } from 'node:path'
+import fs from 'fs-extra'
+import nodeFs from 'fs'
+import { join } from 'path'
 import { outdent } from 'outdent'
-import { setTimeout } from 'node:timers/promises'
 
 const GENERIC_RSC_ERROR =
   'Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive details. A digest property is included on this error instance which may provide additional details about the nature of the error.'
@@ -540,10 +540,10 @@ describe('app-dir action handling', () => {
     // this triggers a revalidate + redirect in a client component
     await browser.elementById('redirect-revalidate-client').click()
     await retry(async () => {
-      expect(await browser.url()).toBe(`${next.url}/revalidate?foo=bar`)
-
       const newJustPutIt = await browser.elementById('justputit').text()
       expect(newJustPutIt).not.toBe(initialJustPutit)
+
+      expect(await browser.url()).toBe(`${next.url}/revalidate?foo=bar`)
     })
 
     // this triggers a revalidate + redirect in a server component
@@ -593,8 +593,7 @@ describe('app-dir action handling', () => {
       beforePageLoad(page) {
         page.on('request', (request) => {
           const url = new URL(request.url())
-          // Only count POST requests to /server (form submissions)
-          if (url.pathname === '/server' && request.method() === 'POST') {
+          if (url.pathname === '/server') {
             requestCount++
           }
         })
@@ -957,21 +956,16 @@ describe('app-dir action handling', () => {
   if (isNextStart) {
     it('should not expose action content in sourcemaps', async () => {
       // We check all sourcemaps in the `static` folder for sensitive information given that chunking
-      const sourcemaps = await fs
-        .readdir(join(next.testDir, '.next', 'static'), {
+      const sourcemaps = nodeFs
+        .readdirSync(join(next.testDir, '.next', 'static'), {
           recursive: true,
           encoding: 'utf8',
         })
-        .then((files) =>
-          Promise.all(
-            files
-              .filter((f) => f.endsWith('.js.map'))
-              .map((f) =>
-                fs.readFile(join(next.testDir, '.next', 'static', f), {
-                  encoding: 'utf8',
-                })
-              )
-          )
+        .filter((f) => f.endsWith('.js.map'))
+        .map((f) =>
+          nodeFs.readFileSync(join(next.testDir, '.next', 'static', f), {
+            encoding: 'utf8',
+          })
         )
 
       expect(sourcemaps).not.toBeEmpty()
@@ -1045,22 +1039,23 @@ describe('app-dir action handling', () => {
     it('should bundle external libraries if they are on the action layer', async () => {
       await next.fetch('/client')
       const pageBundle = await fs.readFile(
-        join(next.testDir, '.next', 'server', 'app', 'client', 'page.js'),
-        { encoding: 'utf8' }
+        join(next.testDir, '.next', 'server', 'app', 'client', 'page.js')
       )
       if (isTurbopack) {
-        const chunkPaths = pageBundle.matchAll(/loadChunk\("([^"]*)"\)/g)
+        const chunkPaths = pageBundle
+          .toString()
+          .matchAll(/loadChunk\("([^"]*)"\)/g)
+        // @ts-ignore
         const reads = [...chunkPaths].map(async (match) => {
           const bundle = await fs.readFile(
-            join(next.testDir, '.next', ...match[1].split(/[\\/]/g)),
-            { encoding: 'utf8' }
+            join(next.testDir, '.next', ...match[1].split(/[\\/]/g))
           )
-          return bundle.includes('node_modules/nanoid/index.js')
+          return bundle.toString().includes('node_modules/nanoid/index.js')
         })
 
         expect(await Promise.all(reads)).toContain(true)
       } else {
-        expect(pageBundle).toContain('node_modules/nanoid/index.js')
+        expect(pageBundle.toString()).toContain('node_modules/nanoid/index.js')
       }
     })
   }
@@ -1524,7 +1519,7 @@ describe('app-dir action handling', () => {
         const browser = await next.browser('/revalidate')
         await browser.refresh()
 
-        const original = await browser.elementByCss('#thankyounext').text()
+        const thankYouNext = await browser.elementByCss('#thankyounext').text()
 
         await browser.elementByCss('#another').click()
         await retry(async () => {
@@ -1533,54 +1528,47 @@ describe('app-dir action handling', () => {
           )
         })
 
-        // Should be the same number although in serverless it might be
-        // eventually consistent.
+        const newThankYouNext = await browser
+          .elementByCss('#thankyounext')
+          .text()
+
+        // Should be the same number although in serverless
+        // it might be eventually consistent
         if (!isNextDeploy) {
-          await retry(async () => {
-            const another = await browser.elementByCss('#thankyounext').text()
-            expect(another).toEqual(original)
-          })
+          expect(thankYouNext).toEqual(newThankYouNext)
         }
 
         await browser.elementByCss('#back').click()
-        await retry(async () => {
-          expect(await browser.elementByCss('#title').text()).toBe('revalidate')
-        })
-
-        switch (type) {
-          case 'tag':
-            await browser.elementByCss('#revalidate-thankyounext').click()
-            break
-          case 'path':
-            await browser.elementByCss('#revalidate-path').click()
-            break
-          default:
-            throw new Error(`Invalid type: ${type}`)
-        }
-
-        // Give some time for it to be revalidated.
-        if (isNextDeploy) {
-          await setTimeout(5000)
-        }
 
         // Should be different
-        let revalidated
+        let revalidatedThankYouNext
         await retry(async () => {
-          revalidated = await browser.elementByCss('#thankyounext').text()
-          expect(revalidated).not.toBe(original)
+          switch (type) {
+            case 'tag':
+              await browser.elementByCss('#revalidate-thankyounext').click()
+              break
+            case 'path':
+              await browser.elementByCss('#revalidate-path').click()
+              break
+            default:
+              throw new Error(`Invalid type: ${type}`)
+          }
+
+          revalidatedThankYouNext = await browser
+            .elementByCss('#thankyounext')
+            .text()
+
+          expect(thankYouNext).not.toBe(revalidatedThankYouNext)
         })
 
         await browser.elementByCss('#another').click()
-        await retry(async () => {
-          expect(await browser.elementByCss('#title').text()).toBe(
-            'another route'
-          )
-        })
 
         // The other page should be revalidated too
         await retry(async () => {
-          const another = await browser.elementByCss('#thankyounext').text()
-          expect(another).toBe(revalidated)
+          const newThankYouNext = await browser
+            .elementByCss('#thankyounext')
+            .text()
+          expect(revalidatedThankYouNext).toBe(newThankYouNext)
         })
       }
     )

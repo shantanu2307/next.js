@@ -3,7 +3,6 @@ import { cookies } from 'next/headers'
 import Link from 'next/link'
 
 export default async function Page() {
-  const randomCookie = (await cookies()).get('random')
   const data = await fetch(
     'https://next-data-api-endpoint.vercel.app/api/random?page',
     {
@@ -34,7 +33,9 @@ export default async function Page() {
       </form>
       <p>
         random cookie:{' '}
-        <span id="random-cookie">{JSON.stringify(randomCookie)}</span>
+        <span id="random-cookie">
+          {JSON.stringify((await cookies()).get('random'))}
+        </span>
       </p>
     </>
   )

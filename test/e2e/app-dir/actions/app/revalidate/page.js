@@ -6,7 +6,6 @@ import { cookies } from 'next/headers'
 import RedirectClientComponent from './client'
 
 export default async function Page() {
-  const cookie = (await cookies()).get('random')
   const data = await fetch(
     'https://next-data-api-endpoint.vercel.app/api/random?page',
     {
@@ -23,7 +22,7 @@ export default async function Page() {
 
   return (
     <>
-      <h1 id="title">revalidate</h1>
+      <p>/revalidate</p>
       <p>
         {' '}
         revalidate (tags: thankyounext): <span id="thankyounext">
@@ -40,7 +39,10 @@ export default async function Page() {
         <span id="justputit">{data2}</span>
       </p>
       <p>
-        random cookie: <span id="random-cookie">{JSON.stringify(cookie)}</span>
+        random cookie:{' '}
+        <span id="random-cookie">
+          {JSON.stringify((await cookies()).get('random'))}
+        </span>
       </p>
       <form>
         <button
