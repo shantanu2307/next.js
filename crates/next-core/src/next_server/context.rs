@@ -1,7 +1,6 @@
 use std::iter::once;
 
 use anyhow::{Result, bail};
-use either::Either;
 use turbo_rcstr::{RcStr, rcstr};
 use turbo_tasks::{FxIndexMap, OptionVcExt, ResolvedVc, TaskInput, Vc};
 use turbo_tasks_env::EnvMap;
@@ -52,7 +51,6 @@ use crate::{
     next_config::NextConfig,
     next_font::local::NextFontLocalResolvePlugin,
     next_import_map::get_next_server_import_map,
-    next_root_params::get_invalid_next_root_params_resolve_plugin,
     next_server::resolve::ExternalPredicate,
     next_shared::{
         resolve::{
@@ -316,20 +314,6 @@ pub async fn get_server_resolve_options_context(
             //[TODO] Build error in this context makes rsc-build-error.ts fail which expects runtime error code
             // looks like webpack and turbopack have different order, webpack runs rsc transform first, turbopack triggers resolve plugin first.
         }
-    }
-
-    if let Some(invalid_next_root_params_resolve_plugin) =
-        get_invalid_next_root_params_resolve_plugin(
-            *next_config.enable_root_params().await?,
-            Either::Left(ty),
-            project_path,
-        )
-    {
-        before_resolve_plugins.push(ResolvedVc::upcast(
-            invalid_next_root_params_resolve_plugin
-                .to_resolved()
-                .await?,
-        ))
     }
 
     let resolve_options_context = ResolveOptionsContext {
