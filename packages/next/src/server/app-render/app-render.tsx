@@ -1576,49 +1576,51 @@ async function renderToHTMLOrFlightImpl(
       // For action requests, we don't want to use the resume data cache.
       requestStore.renderResumeDataCache = null
 
-      // For action requests, we handle them differently with a special render result.
-      const actionRequestResult = await handleAction({
-        req,
-        res,
-        ComponentMod,
-        serverModuleMap,
-        generateFlight: generateDynamicFlightRenderResult,
-        workStore,
-        requestStore,
-        serverActions,
-        ctx,
-        metadata,
-      })
+      try {
+        // For action requests, we handle them differently with a special render result.
+        const actionRequestResult = await handleAction({
+          req,
+          res,
+          ComponentMod,
+          serverModuleMap,
+          generateFlight: generateDynamicFlightRenderResult,
+          workStore,
+          requestStore,
+          serverActions,
+          ctx,
+          metadata,
+        })
 
-      if (actionRequestResult) {
-        if (actionRequestResult.type === 'not-found') {
-          const notFoundLoaderTree = createNotFoundLoaderTree(loaderTree)
-          res.statusCode = 404
-          metadata.statusCode = 404
-          const stream = await renderToStreamWithTracing(
-            requestStore,
-            req,
-            res,
-            ctx,
-            notFoundLoaderTree,
-            formState,
-            postponedState,
-            metadata
-          )
+        if (actionRequestResult) {
+          if (actionRequestResult.type === 'not-found') {
+            const notFoundLoaderTree = createNotFoundLoaderTree(loaderTree)
+            res.statusCode = 404
+            metadata.statusCode = 404
+            const stream = await renderToStreamWithTracing(
+              requestStore,
+              req,
+              res,
+              ctx,
+              notFoundLoaderTree,
+              formState,
+              postponedState,
+              metadata
+            )
 
-          return new RenderResult(stream, { metadata })
-        } else if (actionRequestResult.type === 'done') {
-          if (actionRequestResult.result) {
-            actionRequestResult.result.assignMetadata(metadata)
-            return actionRequestResult.result
-          } else if (actionRequestResult.formState) {
-            formState = actionRequestResult.formState
+            return new RenderResult(stream, { metadata })
+          } else if (actionRequestResult.type === 'done') {
+            if (actionRequestResult.result) {
+              actionRequestResult.result.assignMetadata(metadata)
+              return actionRequestResult.result
+            } else if (actionRequestResult.formState) {
+              formState = actionRequestResult.formState
+            }
           }
         }
+      } finally {
+        // Restore the resume data cache
+        requestStore.renderResumeDataCache = renderResumeDataCache
       }
-
-      // Restore the resume data cache
-      requestStore.renderResumeDataCache = renderResumeDataCache
     }
 
     const options: RenderResultOptions = {
