@@ -172,6 +172,11 @@ const createUncaughtErrorEntry = (
     level: 'error',
   }
 
+  // @ts-expect-error
+  window._logstuff = window._logstuff ?? []
+  // @ts-expect-error
+  window._logstuff.push(entry)
+
   logQueue.scheduleLogSend(entry)
 }
 
@@ -216,7 +221,7 @@ const createUnhandledRejectionNonErrorEntry = (reason: unknown) => {
       {
         kind: 'arg',
         data: `⨯ unhandledRejection:`,
-        isRejectionMessage: true
+        isRejectionMessage: true,
       },
       {
         kind: 'arg',
@@ -259,6 +264,9 @@ const createConsoleMethod = (
   }
 }
 
+
+
+
 export function forwardUnhandledError(error: Error) {
   setOwnerStackIfAvailable(error)
   const ownerStack = getOwnerStack(error)
@@ -275,7 +283,7 @@ export const patchLogs = (router: 'app' | 'pages'): void => {
     return
   }
 
-  const levels: Array<LogLevel> = ['log', 'info', 'warn', 'debug', 'table'] // Remove 'error' - it's handled by patchConsoleError()
+  const levels: Array<LogLevel> = ['log', 'info', 'warn', 'debug', 'table']
 
   levels.forEach((level) => {
     ;(console as any)[level] = createConsoleMethod(

@@ -100,9 +100,7 @@ function onUnhandledError(event: WindowEventMap['error']): void | boolean {
   if (thrownValue) {
     const error = coerceError(thrownValue)
     setOwnerStackIfAvailable(error)
-
     handleClientError(error)
-
     forwardUnhandledError(error)
   }
 }
@@ -122,7 +120,6 @@ function onUnhandledRejection(ev: WindowEventMap['unhandledrejection']): void {
     handler(error)
   }
 
-  // Also send to our term-logs system
   logUnhandledRejection(reason)
 }
 

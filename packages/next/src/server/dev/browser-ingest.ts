@@ -107,7 +107,7 @@ type MappingContext = WebpackMappingContext | TurbopackMappingContext
 async function mapFramesUsingBundler(
   frames: StackFrame[],
   ctx: MappingContext
-): Promise<OriginalStackFramesResponse> {
+) {
   switch (ctx.bundler) {
     case 'webpack': {
       const {
@@ -119,7 +119,8 @@ async function mapFramesUsingBundler(
         edgeServerStats,
         rootDirectory,
       } = ctx
-      return getOriginalStackFramesWebpack({
+      // webpack is the problem
+      const res = await getOriginalStackFramesWebpack({
         isServer,
         isEdgeServer,
         isAppDirectory,
@@ -129,11 +130,12 @@ async function mapFramesUsingBundler(
         edgeServerStats,
         rootDirectory,
       })
+      return res
     }
     case 'turbopack': {
       const { project, projectPath, isServer, isEdgeServer, isAppDirectory } =
         ctx
-      return getOriginalStackFramesTurbopack({
+      const res = await getOriginalStackFramesTurbopack({
         project,
         projectPath,
         frames,
@@ -141,31 +143,11 @@ async function mapFramesUsingBundler(
         isEdgeServer,
         isAppDirectory,
       })
+
+      return res
     }
   }
 }
-
-// function isStackTrace(str: string): boolean {
-//   return str.includes('    at ')
-// }
-
-// old
-// function cleanFileUrls(text: string): string {
-
-//   return text.replace(/\bfile:\/{1,3}([^)\s\n]+)/g, (_, pathWithLocation) => {
-//     const parts = pathWithLocation.split(':')
-//     const filePath = parts[0]
-//     const location = parts.length > 1 ? ':' + parts.slice(1).join(':') : ''
-
-//     try {
-//       const relativePath = path.relative(process.cwd(), filePath)
-//       const cleanPath = relativePath.startsWith('..') ? filePath : relativePath
-//       return cleanPath + location
-//     } catch {
-//       return pathWithLocation
-//     }
-//   })
-// }
 
 // converts _next/static/chunks/... to file:///.next/static/chunks/... for parseStack
 // todo: where does next dev overlay handle this case and re-use that logic
@@ -221,36 +203,56 @@ async function getSourceMappedStackFrames(
       .map(({ result, originalFrame }) => {
         if (result.status === 'rejected') {
           return {
+            kind: 'rejected' as const,
             frameText: formatStackFrame(originalFrame),
             codeFrame: null,
           }
         }
 
         const { originalStackFrame, originalCodeFrame } = result.value
-
-        // ignored frames are internal framework gunk, maybe we want this configurable by user
-        if (!originalStackFrame || originalStackFrame.ignored) {
-          return null
+        if (originalStackFrame?.ignored) {
+          return {
+            kind: 'ignored' as const,
+          }
         }
 
         return {
-          frameText: formatStackFrame(originalStackFrame),
+          kind: 'success' as const,
+          // invariant: if result is not rejected and not ignored, then original stack frame exists
+          // verifiable by tracing `getOriginalStackFrame`. The invariant exists because of bad types
+          frameText: formatStackFrame(originalStackFrame!),
           codeFrame: originalCodeFrame,
         }
       })
-      .filter((val) => !!val)
 
-    if (processedFrames.length === 0) {
+    const allIgnored = processedFrames.every(
+      (frame) => frame.kind === 'ignored'
+    )
+
+    // we want to handle **all** ignored vs all/some rejected differently
+    // if all are ignored we should show no frames
+    // if all are rejected, we want to fallback to showing original stack frames
+    if (allIgnored) {
+      return {
+        kind: 'all-ignored' as const,
+      }
+    }
+
+    const filteredFrames = processedFrames.filter(
+      (frame) => frame.kind !== 'ignored'
+    )
+
+    if (filteredFrames.length === 0) {
       return {
         kind: 'stack' as const,
         stack: stackTrace,
       }
     }
 
-    const stackOutput = processedFrames
+    const stackOutput = filteredFrames
       .map((frame) => frame.frameText)
       .join('\n')
-    const firstFrameCode = processedFrames.find(
+    const firstFrameCode = filteredFrames.find(
       (frame) => frame.codeFrame
     )?.codeFrame
 
@@ -283,32 +285,7 @@ function formatStackFrame(frame: StackFrame): string {
 
   return `    at ${functionName} (${location})`
 }
-
-// async function processErrorArgs(
-//   args: any[],
-//   ctx: MappingContext,
-//   distDir?: string
-// ): Promise<any[]> {
-//   const processedArgs = await Promise.all(
-//     args.map(async (arg) => {
-//       if (typeof arg !== 'string' || !isStackTrace(arg)) {
-//         return arg
-//       }
-
-//       try {
-//         const sourceMapped = await getSourceMappedStackFrames(arg, ctx, distDir)
-//         // return cleanFileUrls(sourceMapped)
-//         return sourceMapped
-//       } catch (error) {
-//         return arg
-//       }
-//     })
-//   )
-
-//   return processedArgs
-// }
-
-function deserializeArgData(arg: any) {
+async function deserializeArgData(arg: any) {
   try {
     // we want undefined to be represented as it would be in the browser from the user's perspective
     if (arg === UNDEFINED_MARKER) {
@@ -330,24 +307,37 @@ const colorSourceMappedStackFrames = (
 ) => {
   const colorFn =
     config?.applyColor === undefined || config.applyColor ? red : <T>(x: T) => x
-  if (mapped.kind === 'with-frame-code') {
-    return (
-      (config?.prefix ? colorFn(config?.prefix) : '') +
-      `\n${colorFn(mapped.stack)}\n${mapped.frameCode}`
-    )
+  // console.log('WHAT IS THIS', {
+  //   config,
+  //   mapped,
+  // })
+  switch (mapped.kind) {
+    case 'stack': {
+      return (
+        (config?.prefix ? colorFn(config?.prefix) : '') +
+        `\n${colorFn(mapped.stack)}`
+      )
+    }
+    case 'with-frame-code': {
+      return (
+        (config?.prefix ? colorFn(config?.prefix) : '') +
+        `\n${colorFn(mapped.stack)}\n${mapped.frameCode}`
+      )
+    }
+    // we don't want to echo the gunk if it's just
+    // a more sophisticated version of this allows the user to config if they want ignored frames (but we need to be sure to source map them)
+    case 'all-ignored': {
+      return config?.prefix ? colorFn(config?.prefix) : ''
+    }
   }
-
-  return (
-    (config?.prefix ? colorFn(config?.prefix) : '') +
-    `\n${colorFn(mapped.stack)}`
-  )
+  mapped satisfies never
 }
 
 async function enhanceErrors(
   entry: LogEntry,
   ctx: MappingContext,
-  distDir?: string
-): Promise<Array<any>> {
+  distDir: string
+) {
   switch (entry.kind) {
     case 'formatted-error': {
       const mappedStack = await getSourceMappedStackFrames(
@@ -428,7 +418,7 @@ async function enhanceErrors(
 export async function receiveEvent(
   entries: LogEntry[],
   ctx: MappingContext,
-  distDir?: string
+  distDir: string
 ): Promise<void> {
   const browserPrefix = cyan('[browser]')
 
@@ -485,15 +475,6 @@ export async function receiveEvent(
     }
   }
 }
-function inspectDeep(arg: unknown): string {
-  if (typeof arg === 'string') {
-    return arg
-  }
-  return util.inspect(arg, {
-    colors: true,
-    depth: null, // this is configured by user during frontend serialization
-  })
-}
 
 export async function receiveBrowserLogsWebpack(opts: {
   entries: LogEntry[]
@@ -503,7 +484,7 @@ export async function receiveBrowserLogsWebpack(opts: {
   serverStats: () => any
   edgeServerStats: () => any
   rootDirectory: string
-  distDir?: string
+  distDir: string
 }): Promise<void> {
   const {
     entries,
@@ -540,7 +521,7 @@ export async function receiveBrowserLogsTurbopack(opts: {
   sourceType?: 'server' | 'edge-server'
   project: Project
   projectPath: string
-  distDir?: string
+  distDir: string
 }): Promise<void> {
   const { entries, router, sourceType, project, projectPath, distDir } = opts
 

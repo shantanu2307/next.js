@@ -177,6 +177,7 @@ function findOriginalSourcePositionAndContentFromCompilation(
   return module?.buildInfo?.importLocByPath?.get(importedModule) ?? null
 }
 
+// mark: relevant function
 export async function createOriginalStackFrame({
   source,
   rootDirectory,
@@ -187,7 +188,10 @@ export async function createOriginalStackFrame({
   rootDirectory: string
   frame: StackFrame
   errorMessage?: string
-}): Promise<OriginalStackFrameResponse | null> {
+}): Promise<{
+  originalStackFrame: (StackFrame & { ignored: boolean })
+  originalCodeFrame?: string | null
+} | null> {
   const moduleNotFound = findModuleNotFoundFromError(errorMessage)
   const result = await (() => {
     if (moduleNotFound) {
@@ -376,7 +380,7 @@ export function getOriginalStackFrames({
 }): Promise<OriginalStackFramesResponse> {
   return Promise.all(
     frames.map(
-      (frame): Promise<OriginalStackFramesResponse[number]> =>
+      (frame) =>
         getOriginalStackFrame({
           isServer,
           isEdgeServer,
@@ -389,13 +393,13 @@ export function getOriginalStackFrames({
         }).then(
           (value) => {
             return {
-              status: 'fulfilled',
+              status: 'fulfilled' as const,
               value,
             }
           },
           (reason) => {
             return {
-              status: 'rejected',
+              status: 'rejected' as const,
               reason: inspect(reason, { colors: false }),
             }
           }
@@ -422,7 +426,10 @@ async function getOriginalStackFrame({
   serverStats: () => webpack.Stats | null
   edgeServerStats: () => webpack.Stats | null
   rootDirectory: string
-}): Promise<OriginalStackFrameResponse> {
+}): Promise<{
+  originalStackFrame: (StackFrame & { ignored: boolean }) 
+  originalCodeFrame?: string | null
+}> {
   const filename = frame.file ?? ''
   const source = await getSource(filename, {
     getCompilations: () => {
