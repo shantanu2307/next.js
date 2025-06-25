@@ -215,7 +215,12 @@ const createUnhandledRejectionNonErrorEntry = (reason: unknown) => {
     args: [
       {
         kind: 'arg',
-        data: logStringify(`⨯ unhandledRejection: ${String(reason)}`),
+        data: `⨯ unhandledRejection:`,
+        isRejectionMessage: true
+      },
+      {
+        kind: 'arg',
+        data: logStringify(reason),
       },
     ],
   }

@@ -1,11 +1,8 @@
 import type { StackFrame } from 'next/dist/compiled/stacktrace-parser'
-import type {
-  OriginalStackFramesRequest,
-  OriginalStackFramesResponse,
-} from '../../next-devtools/server/shared'
-import { cyan, red, yellow, blue, white } from '../../lib/picocolors'
+import type { OriginalStackFramesResponse } from '../../next-devtools/server/shared'
+import { cyan, red } from '../../lib/picocolors'
 import { parseStack } from '../lib/parse-stack'
-import path, { parse } from 'path'
+import path from 'path'
 import { getOriginalStackFrames as getOriginalStackFramesWebpack } from './middleware-webpack'
 import { getOriginalStackFrames as getOriginalStackFramesTurbopack } from './middleware-turbopack'
 import type { Project } from '../../build/swc/types'
@@ -48,7 +45,7 @@ export type ConsoleEntry = {
   args: Array<
     | {
         kind: 'arg'
-        data: any
+        data: string
       }
     | {
         kind: 'formatted-error-arg'
@@ -66,6 +63,7 @@ export type ConsoleErrorEntry = {
     | {
         kind: 'arg'
         data: any
+        isRejectionMessage?: boolean
       }
     | {
         kind: 'formatted-error-arg'
@@ -311,17 +309,10 @@ function formatStackFrame(frame: StackFrame): string {
 // }
 
 function deserializeArgData(arg: any) {
-  // undefined
-  // if (arg === undefined) {
-  //   return undefined
-  // }
-  // console.log('after json parse', JSON.parse(arg));
-
   try {
     // we want undefined to be represented as it would be in the browser from the user's perspective
-    const parsed = JSON.parse(arg)
-    if (typeof parsed === 'string' && parsed.includes(UNDEFINED_MARKER)) {
-      console.log('WHAT IS PARSED', parsed, parsed === UNDEFINED_MARKER)
+    if (arg === UNDEFINED_MARKER) {
+      return restoreUndefined(arg)
     }
 
     return restoreUndefined(JSON.parse(arg))
@@ -397,7 +388,12 @@ async function enhanceErrors(
           switch (arg.kind) {
             case 'arg': {
               // hm
-              return red(inspectDeep(arg.data))
+              if (arg.isRejectionMessage) {
+                // if we want it to look like our server output we would just color the red x, idk todo i kinda like the full red, but maybe should sync other message then?
+                return red(arg.data)
+              }
+              // return red(inspectDeep(arg.data))
+              return arg.data
             }
             case 'formatted-error-arg': {
               const mappedStack = await getSourceMappedStackFrames(
@@ -426,6 +422,7 @@ async function enhanceErrors(
       return [...deserializedArgs, colorSourceMappedStackFrames(mappedStack)]
     }
   }
+  entry satisfies never
 }
 
 export async function receiveEvent(

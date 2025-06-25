@@ -26,6 +26,7 @@ export type ConsoleErrorEntry = {
     | {
         kind: 'arg'
         data: any
+        isRejectionMessage?: boolean
       }
     | {
         kind: 'formatted-error-arg'
