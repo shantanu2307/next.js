@@ -393,7 +393,7 @@ async function enhanceErrors(
                 return red(arg.data)
               }
               // return red(inspectDeep(arg.data))
-              return arg.data
+              return deserializeArgData(arg.data)
             }
             case 'formatted-error-arg': {
               const mappedStack = await getSourceMappedStackFrames(
