@@ -19,6 +19,7 @@ export const DEVTOOLS_PANEL_TAB_ISSUES_SIDEBAR_FRAME_SKELETON_STYLES = css`
     background-size: 200% 100%;
     animation: skeleton-shimmer 1.5s ease-in-out infinite;
 
+    /* Equal to the line-height of the sidebar-frame-source. */
     height: var(--size-18);
   }
 
