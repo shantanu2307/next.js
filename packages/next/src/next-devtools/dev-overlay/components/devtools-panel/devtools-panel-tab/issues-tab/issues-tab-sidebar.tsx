@@ -58,18 +58,12 @@ const IssuesTabSidebarFrameItem = memo(function IssuesTabSidebarFrameItem({
     return null
   }
 
-  const errorType = getErrorTypeLabel(runtimeError.error, runtimeError.type)
   const frameSource = getFrameSource(firstFrame.originalStackFrame)
 
   return (
-    <>
-      <span data-nextjs-devtools-panel-tab-issues-sidebar-frame-error-type>
-        {errorType}
-      </span>
-      <span data-nextjs-devtools-panel-tab-issues-sidebar-frame-source>
-        {frameSource}
-      </span>
-    </>
+    <span data-nextjs-devtools-panel-tab-issues-sidebar-frame-source>
+      {frameSource}
+    </span>
   )
 })
 
@@ -84,12 +78,16 @@ const IssuesTabSidebarFrame = memo(function IssuesTabSidebarFrame({
   isActive: boolean
   setActiveIndex: (idx: number) => void
 }) {
+  const errorType = getErrorTypeLabel(runtimeError.error, runtimeError.type)
   return (
     <button
       data-nextjs-devtools-panel-tab-issues-sidebar-frame
       data-nextjs-devtools-panel-tab-issues-sidebar-frame-active={isActive}
       onClick={() => setActiveIndex(idx)}
     >
+      <span data-nextjs-devtools-panel-tab-issues-sidebar-frame-error-type>
+        {errorType}
+      </span>
       <Suspense fallback={<IssuesTabSidebarFrameSkeleton />}>
         <IssuesTabSidebarFrameItem runtimeError={runtimeError} />
       </Suspense>

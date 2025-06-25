@@ -2,10 +2,7 @@ import { css } from '../../../../utils/css'
 
 export function IssuesTabSidebarFrameSkeleton() {
   return (
-    <>
-      <div data-nextjs-devtools-panel-tab-issues-sidebar-frame-skeleton-bar="1" />
-      <div data-nextjs-devtools-panel-tab-issues-sidebar-frame-skeleton-bar="2" />
-    </>
+    <div data-nextjs-devtools-panel-tab-issues-sidebar-frame-skeleton-bar />
   )
 }
 
@@ -21,15 +18,8 @@ export const DEVTOOLS_PANEL_TAB_ISSUES_SIDEBAR_FRAME_SKELETON_STYLES = css`
     );
     background-size: 200% 100%;
     animation: skeleton-shimmer 1.5s ease-in-out infinite;
-  }
 
-  [data-nextjs-devtools-panel-tab-issues-sidebar-frame-skeleton-bar='1'] {
-    width: 75%;
-    margin-bottom: 8px;
-  }
-
-  [data-nextjs-devtools-panel-tab-issues-sidebar-frame-skeleton-bar='2'] {
-    width: 36.5%;
+    height: var(--size-18);
   }
 
   @keyframes skeleton-shimmer {
