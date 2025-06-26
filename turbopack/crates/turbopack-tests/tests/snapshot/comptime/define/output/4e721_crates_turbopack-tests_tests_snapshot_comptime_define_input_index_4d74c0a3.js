@@ -10,7 +10,9 @@ if ("TURBOPACK compile-time truthy", 1) {
 if ("TURBOPACK compile-time truthy", 1) {
     console.log('DEFINED_VALUE');
 }
-if ("TURBOPACK compile-time value", JSON.parse('{"test":true}')) {
+if ("TURBOPACK compile-time value", {
+    "test": true
+}) {
     console.log('A.VERY.LONG.DEFINED.VALUE');
 }
 if ("TURBOPACK compile-time truthy", 1) {
@@ -19,7 +21,9 @@ if ("TURBOPACK compile-time truthy", 1) {
 if ("TURBOPACK compile-time falsy", 0) //TURBOPACK unreachable
 ;
 var p = process;
-console.log(("TURBOPACK compile-time value", JSON.parse('{"test":true}')));
+console.log(("TURBOPACK compile-time value", {
+    "test": true
+}));
 console.log(("TURBOPACK compile-time value", "value"));
 console.log(("TURBOPACK compile-time value", "development"));
 if ("TURBOPACK compile-time falsy", 0) //TURBOPACK unreachable

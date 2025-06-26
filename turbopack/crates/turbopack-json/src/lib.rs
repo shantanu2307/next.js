@@ -130,6 +130,8 @@ impl EcmascriptChunkItem for JsonChunkItem {
         match &*data {
             FileJsonContent::Content(data) => {
                 let js_str_content = serde_json::to_string(&data.to_string())?;
+                // TODO only use JSON.parse if the content is larger than 10kb
+                // https://v8.dev/blog/cost-of-javascript-2019#json
                 let inner_code = format!("{TURBOPACK_EXPORT_VALUE}(JSON.parse({js_str_content}));");
 
                 Ok(EcmascriptChunkItemContent {
