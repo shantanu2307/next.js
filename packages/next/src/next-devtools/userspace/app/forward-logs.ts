@@ -322,51 +322,6 @@ const isHMR = (args: any[]) => {
   return false
 }
 
-// Based on https://github.com/facebook/react/blob/28dc0776be2e1370fe217549d32aee2519f0cf05/packages/react-server/src/ReactFlightServer.js#L248
-// function patchConsoleMethod(methodName: LogMethod): () => void {
-//   const descriptor = Object.getOwnPropertyDescriptor(console, methodName)
-//   if (
-//     descriptor &&
-//     (descriptor.configurable || descriptor.writable) &&
-//     typeof descriptor.value === 'function'
-//   ) {
-//     const originalMethod = descriptor.value
-//     const originalName = Object.getOwnPropertyDescriptor(originalMethod, 'name')
-//     const wrapperMethod = function (
-//       this: typeof console,
-//       ...args: Parameters<(typeof console)[LogMethod]>
-//     ) {
-//       try {
-//         // we already have HMR logs on server, so information is redundant
-//         if (isHMR(args)) {
-//           originalMethod.apply(this, args)
-//           return
-//         }
-//         createLogEntry(methodName, args)
-//         originalMethod.apply(this, args)
-//       } catch {
-//         originalMethod.apply(this, args)
-//       }
-//     }
-//     if (originalName) {
-//       Object.defineProperty(wrapperMethod, 'name', originalName)
-//     }
-//     Object.defineProperty(console, methodName, {
-//       value: wrapperMethod,
-//     })
-
-//     return () => {
-//       Object.defineProperty(console, methodName, {
-//         value: originalMethod,
-//         writable: descriptor.writable,
-//         configurable: descriptor.configurable,
-//       })
-//     }
-//   }
-
-//   return () => {}
-// }
-
 export function forwardUnhandledError(error: Error) {
   createUncaughtErrorEntry(error.name, error.message, stackWithOwners(error))
 }

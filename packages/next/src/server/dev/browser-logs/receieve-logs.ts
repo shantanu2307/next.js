@@ -185,7 +185,7 @@ async function handleTable(entry: ConsoleEntry, browserPrefix: string) {
       return deserializeArgData(arg.data)
     })
   )
-  // console.table cannot have prefix inline, mimic original behavior
+  // we can't inline pass browser prefix, but it looks better multiline for table anyways
   forwardConsole.log(browserPrefix)
   forwardConsole.table(...deserializedArgs)
 }
@@ -249,8 +249,7 @@ async function handleDir(
     const originalWrite = process.stdout.write.bind(process.stdout)
     let captured = ''
     // intercept stdout to prepend prefix later
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ;(process.stdout.write as any) = (chunk: any) => {
+    process.stdout.write = (chunk) => {
       captured += chunk
       return true
     }

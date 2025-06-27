@@ -5,7 +5,6 @@ import {
 } from '../../../../server/dev/hot-reloader-types'
 import { getSocketUrl } from '../get-socket-url'
 
-// mark: websocket available here
 let source: WebSocket
 
 type ActionCallback = (action: HMR_ACTION_TYPES) => void
