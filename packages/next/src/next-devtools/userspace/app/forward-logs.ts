@@ -348,14 +348,17 @@ export const initializeDebugLogForwarding = (router: 'app' | 'pages'): void => {
     'trace',
   ]
 
-  methods.forEach((method) =>
-    patchConsoleMethod(method, (...args) => {
-      if (isHMR(args)) {
-        return false
-      }
-      createLogEntry(method, args)
-    })
-  )
+  // better to be safe than sorry
+  try {
+    methods.forEach((method) =>
+      patchConsoleMethod(method, (...args) => {
+        if (isHMR(args)) {
+          return false
+        }
+        createLogEntry(method, args)
+      })
+    )
+  } catch {}
   logQueue.router = router
   isPatched = true
 }
