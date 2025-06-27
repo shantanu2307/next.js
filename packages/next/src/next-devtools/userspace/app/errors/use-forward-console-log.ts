@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react'
+import { useEffect } from 'react'
 import { logQueue } from '../forward-logs'
 import type { useWebsocket } from '../../../../client/dev/hot-reloader/app/use-websocket'
 
@@ -19,5 +19,5 @@ export const useForwardConsoleLog = (
     return () => {
       socket.removeEventListener('open', onOpen)
     }
-  }, [socketRef.current])
+  }, [socketRef])
 }

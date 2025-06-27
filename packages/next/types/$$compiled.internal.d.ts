@@ -690,14 +690,10 @@ declare module 'next/dist/compiled/stacktrace-parser' {
   export = m
 }
 
-
-
 declare module 'next/dist/compiled/anser' {
   import * as m from 'anser'
   export = m
 }
-
-
 
 declare module 'next/dist/compiled/safe-stable-stringify' {
   import * as m from 'safe-stable-stringify'
