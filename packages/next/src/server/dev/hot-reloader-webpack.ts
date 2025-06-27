@@ -569,16 +569,19 @@ export default class HotReloaderWebpack implements NextJsHotReloaderInterface {
               break
             }
             case 'browser-logs': {
-              await receiveBrowserLogsWebpack({
-                entries: payload.entries,
-                router: payload.router,
-                sourceType: payload.sourceType,
-                clientStats: () => this.clientStats,
-                serverStats: () => this.serverStats,
-                edgeServerStats: () => this.edgeServerStats,
-                rootDirectory: this.dir,
-                distDir: this.distDir,
-              })
+              // Only process browser logs if terminal logging is enabled
+              if (this.config.experimental.terminalLogging) {
+                await receiveBrowserLogsWebpack({
+                  entries: payload.entries,
+                  router: payload.router,
+                  sourceType: payload.sourceType,
+                  clientStats: () => this.clientStats,
+                  serverStats: () => this.serverStats,
+                  edgeServerStats: () => this.edgeServerStats,
+                  rootDirectory: this.dir,
+                  distDir: this.distDir,
+                })
+              }
               break
             }
             default: {

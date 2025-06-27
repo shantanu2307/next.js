@@ -1470,6 +1470,7 @@ export const defaultConfig = {
     slowModuleDetection: undefined,
     globalNotFound: false,
     devtoolSegmentExplorer: false,
+    terminalLogging: false,
   },
   htmlLimitedBots: undefined,
   bundlePagesRouterDependencies: false,

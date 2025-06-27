@@ -303,6 +303,10 @@ export function getDefineEnv({
       isDevToolPanelUIEnabled || !!config.experimental.devtoolSegmentExplorer,
     'process.env.__NEXT_DEVTOOL_NEW_PANEL_UI': isDevToolPanelUIEnabled,
 
+    'process.env.__NEXT_TERMINAL_LOGGING_CONFIG': JSON.stringify(
+      config.experimental.terminalLogging || false
+    ),
+
     // The devtools need to know whether or not to show an option to clear the
     // bundler cache. This option may be removed later once Turbopack's
     // persistent cache feature is more stable.

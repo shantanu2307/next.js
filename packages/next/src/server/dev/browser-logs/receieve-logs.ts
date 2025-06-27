@@ -1,4 +1,4 @@
-import { cyan, dim, gray, red, yellow } from '../../../lib/picocolors'
+import { cyan, dim, red, yellow } from '../../../lib/picocolors'
 import type { Project } from '../../../build/swc/types'
 import util from 'util'
 import {
@@ -7,13 +7,12 @@ import {
   withStack,
   type MappingContext,
 } from './source-map'
-import type {
-  LogEntry,
-  LogMethod,
-} from '../../../next-devtools/shared/forward-logs-types'
-
-// todo: share with client
-const UNDEFINED_MARKER = '__next_tagged_undefined'
+import {
+  type LogEntry,
+  type LogMethod,
+  type ConsoleEntry,
+  UNDEFINED_MARKER,
+} from '../../../next-devtools/shared/forward-logs-shared'
 
 export function restoreUndefined(x: any): any {
   if (x === UNDEFINED_MARKER) return undefined
@@ -26,7 +25,6 @@ export function restoreUndefined(x: any): any {
   return x
 }
 
-// todo: use react impl sebbie posted
 const methods: Array<LogMethod> = [
   'log',
   'info',
@@ -115,236 +113,229 @@ const colorError = (
   mapped satisfies never
 }
 
-async function prepareArgs(
-  entry: LogEntry,
+// --- Argument preparation helpers ---
+function prepareFormattedErrorArgs(
+  entry: Extract<LogEntry, { kind: 'formatted-error' }>,
   ctx: MappingContext,
   distDir: string
 ) {
-  switch (entry.kind) {
-    case 'formatted-error': {
-      const mappedStack = await getSourceMappedStackFrames(
-        entry.stack,
-        ctx,
-        distDir
-      )
-      return [colorError(mappedStack, { prefix: entry.prefix })]
-    }
-    case 'console': {
-      const deserializedArgs = await Promise.all(
-        entry.args.map(async (arg) => {
-          switch (arg.kind) {
-            case 'arg': {
-              const deserialized = await deserializeArgData(arg.data)
-              if (entry.method === 'warn' && typeof deserialized === 'string') {
-                return yellow(deserialized)
-              }
-              return deserialized
-            }
-            case 'formatted-error-arg': {
-              if (!arg.stack) {
-                return red(arg.prefix)
-              }
-              const mappedStack = await getSourceMappedStackFrames(
-                arg.stack,
-                ctx,
-                distDir
-              )
-              return colorError(mappedStack, {
-                prefix: arg.prefix,
-                applyColor: false,
-              })
-            }
-          }
-        })
-      )
-      return deserializedArgs
-    }
-    case 'console-error': {
-      const deserializedArgs = await Promise.all(
-        entry.args.map(async (arg) => {
-          switch (arg.kind) {
-            case 'arg': {
-              if (arg.isRejectionMessage) {
-                // if we want it to look like our server output we would just color the red x, idk todo i kinda like the full red, but maybe should sync other message then?
-                return red(arg.data) // already a string
-              }
-              // return red(inspectDeep(arg.data))
-              return deserializeArgData(arg.data)
-            }
-            case 'formatted-error-arg': {
-              if (!arg.stack) {
-                return red(arg.prefix)
-              }
-              const mappedStack = await getSourceMappedStackFrames(
-                arg.stack,
-                ctx,
-                distDir
-              )
-              return colorError(mappedStack, {
-                prefix: arg.prefix,
-              })
-            }
-          }
-        })
-      )
-
-      if (entry.args.some((arg) => arg.kind === 'formatted-error-arg')) {
-        // then we already are showing the pretty stack, we don't need to show it twice (though the console stack has slightly different info than the error stack)
-        return deserializedArgs
-      }
-      const mappedStack = await getSourceMappedStackFrames(
-        entry.consoleErrorStack,
-        ctx,
-        distDir
-      )
-
-      return [...deserializedArgs, colorError(mappedStack)]
-    }
-  }
-  entry satisfies never
+  return getSourceMappedStackFrames(entry.stack, ctx, distDir).then(
+    (mapped) => [colorError(mapped, { prefix: entry.prefix })]
+  )
 }
 
-export async function receiveEvent(
+async function prepareConsoleArgs(
+  entry: Extract<LogEntry, { kind: 'console' }>,
+  ctx: MappingContext,
+  distDir: string
+) {
+  const deserialized = await Promise.all(
+    entry.args.map(async (arg) => {
+      if (arg.kind === 'arg') {
+        const data = await deserializeArgData(arg.data)
+        if (entry.method === 'warn' && typeof data === 'string') {
+          return yellow(data)
+        }
+        return data
+      }
+      if (!arg.stack) return red(arg.prefix)
+      const mapped = await getSourceMappedStackFrames(arg.stack, ctx, distDir)
+      return colorError(mapped, { prefix: arg.prefix, applyColor: false })
+    })
+  )
+  return deserialized
+}
+
+async function prepareConsoleErrorArgs(
+  entry: Extract<LogEntry, { kind: 'any-logged-error' }>,
+  ctx: MappingContext,
+  distDir: string
+) {
+  const deserialized = await Promise.all(
+    entry.args.map(async (arg) => {
+      if (arg.kind === 'arg') {
+        if (arg.isRejectionMessage) return red(arg.data)
+        return deserializeArgData(arg.data)
+      }
+      // formatted-error-arg
+      if (!arg.stack) return red(arg.prefix)
+      const mapped = await getSourceMappedStackFrames(arg.stack, ctx, distDir)
+      return colorError(mapped, { prefix: arg.prefix })
+    })
+  )
+
+  if (entry.args.some((a) => a.kind === 'formatted-error-arg')) {
+    return deserialized
+  }
+  const mappedStack = await getSourceMappedStackFrames(
+    entry.consoleErrorStack,
+    ctx,
+    distDir
+  )
+  return [...deserialized, colorError(mappedStack)]
+}
+
+// Helper functions for specific console methods
+async function handleTable(entry: ConsoleEntry, browserPrefix: string) {
+  const deserializedArgs = await Promise.all(
+    entry.args.map(async (arg: any) => {
+      if (arg.kind === 'formatted-error-arg') {
+        return { stack: arg.stack }
+      }
+      return deserializeArgData(arg.data)
+    })
+  )
+  // console.table cannot have prefix inline, mimic original behavior
+  forwardConsole.log(browserPrefix)
+  forwardConsole.table(...deserializedArgs)
+}
+
+async function handleTrace(
+  entry: ConsoleEntry,
+  browserPrefix: string,
+  ctx: MappingContext,
+  distDir: string
+) {
+  const deserializedArgs = await Promise.all(
+    entry.args.map(async (arg: any) => {
+      if (arg.kind === 'formatted-error-arg') {
+        if (!arg.stack) return red(arg.prefix)
+        const mapped = await getSourceMappedStackFrames(arg.stack, ctx, distDir)
+        return colorError(mapped, { prefix: arg.prefix })
+      }
+      return deserializeArgData(arg.data)
+    })
+  )
+
+  if (!entry.consoleMethodStack) {
+    forwardConsole.log(
+      browserPrefix,
+      ...deserializedArgs,
+      '[Trace unavailable]'
+    )
+    return
+  }
+
+  const [mapped, mappedIgnored] = await Promise.all([
+    getSourceMappedStackFrames(entry.consoleMethodStack, ctx, distDir, false),
+    getSourceMappedStackFrames(entry.consoleMethodStack, ctx, distDir),
+  ])
+  const location = getConsoleLocation(mappedIgnored)
+  forwardConsole.log(
+    browserPrefix,
+    ...deserializedArgs,
+    `\n${mapped.stack}`,
+    ...(location ? [`\n${location}`] : [])
+  )
+}
+
+async function handleDir(
+  entry: ConsoleEntry,
+  browserPrefix: string,
+  ctx: MappingContext,
+  distDir: string
+) {
+  const loggableEntry = await prepareConsoleArgs(entry, ctx, distDir)
+  const consoleMethod =
+    (forwardConsole as any)[entry.method] || forwardConsole.log
+
+  if (entry.consoleMethodStack) {
+    const mapped = await getSourceMappedStackFrames(
+      entry.consoleMethodStack,
+      ctx,
+      distDir
+    )
+    const location = dim(`(${getConsoleLocation(mapped)})`)
+    const originalWrite = process.stdout.write.bind(process.stdout)
+    let captured = ''
+    // intercept stdout to prepend prefix later
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(process.stdout.write as any) = (chunk: any) => {
+      captured += chunk
+      return true
+    }
+    try {
+      consoleMethod(...loggableEntry)
+    } finally {
+      // restore
+      ;(process.stdout.write as any) = originalWrite
+    }
+    const preserved = captured.replace(/\r?\n$/, '')
+    originalWrite(`${browserPrefix}${preserved} ${location}\n`)
+    return
+  }
+  consoleMethod(browserPrefix, ...loggableEntry)
+}
+
+async function handleDefaultConsole(
+  entry: ConsoleEntry,
+  browserPrefix: string,
+  ctx: MappingContext,
+  distDir: string
+) {
+  const loggableEntry = await prepareConsoleArgs(entry, ctx, distDir)
+  const withStackEntry = await withStack(
+    {
+      original: loggableEntry,
+      stack: (entry as any).consoleMethodStack || null,
+    },
+    ctx,
+    distDir
+  )
+  const consoleMethod =
+    (forwardConsole as any)[(entry as any).method] || forwardConsole.log
+  consoleMethod(browserPrefix, ...withStackEntry)
+}
+
+export async function handleLog(
   entries: LogEntry[],
   ctx: MappingContext,
   distDir: string
 ): Promise<void> {
-  const baseBrowserPrefix = cyan('[browser]')
+  const browserPrefix = cyan('[browser]')
 
   for (const entry of entries) {
     try {
       switch (entry.kind) {
         case 'console': {
-          const browserPrefix = baseBrowserPrefix
-
           switch (entry.method) {
             case 'table': {
-              const deserializedArgs = await Promise.all(
-                entry.args.map(async (arg) => {
-                  // browser behavior when console.table(new Error) is showing stack in table
-                  if (arg.kind === 'formatted-error-arg') {
-                    return {
-                      stack: arg.stack,
-                    }
-                  }
-
-                  return deserializeArgData(arg.data)
-                })
-              )
-              // can't inline a browser prefix to console table
-              forwardConsole.log(browserPrefix)
-              forwardConsole.table(...deserializedArgs)
+              await handleTable(entry, browserPrefix)
               break
             }
             case 'trace': {
-              const deserializedArgs = await Promise.all(
-                entry.args.map(async (arg) => {
-                  // browser behavior when console.table(new Error) is showing stack in table
-                  if (arg.kind === 'formatted-error-arg') {
-                    if (!arg.stack) {
-                      return red(arg.prefix)
-                    }
-                    const mappedStack = await getSourceMappedStackFrames(
-                      arg.stack,
-                      ctx,
-                      distDir
-                    )
-                    return colorError(mappedStack, {
-                      prefix: arg.prefix,
-                    })
-                  }
-                  return deserializeArgData(arg.data)
-                })
-              )
-
-              if (!entry.consoleMethodStack) {
-                forwardConsole.log(
-                  browserPrefix,
-                  ...deserializedArgs,
-                  '[Trace unavailable]'
-                )
-                break
-              }
-
-              // this is pretty bad but its fine
-              // i should see how expensive this fn is :think
-              const [mapped, mappedIgnored] = await Promise.all([
-                getSourceMappedStackFrames(
-                  entry.consoleMethodStack,
-                  ctx,
-                  distDir,
-                  false
-                ),
-                getSourceMappedStackFrames(
-                  entry.consoleMethodStack,
-                  ctx,
-                  distDir
-                ),
-              ])
-
-              const location = getConsoleLocation(mappedIgnored)
-
-              // console.trace on server will show the trace of console.trace, which is useless to the user and not whats shown in browser
-              forwardConsole.log(
-                browserPrefix,
-                ...deserializedArgs,
-                `\n${mapped.stack}`,
-                ...(location ? [`\n${location}`] : [])
-              )
+              await handleTrace(entry, browserPrefix, ctx, distDir)
               break
             }
             case 'dir': {
-              const loggableEntry = await prepareArgs(entry, ctx, distDir)
-              const consoleMethod =
-                forwardConsole[entry.method] || forwardConsole.log
-
-              process.stdout.write(browserPrefix)
-              consoleMethod(...loggableEntry)
-
-              if (entry.consoleMethodStack) {
-                const mapped = await getSourceMappedStackFrames(
-                  entry.consoleMethodStack,
-                  ctx,
-                  distDir
-                )
-                const location = dim(`(${getConsoleLocation(mapped)})`)
-                if (location) {
-                  process.stdout.write('\x1b[1A')
-                  process.stdout.write(' ' + location + '\n')
-                  break
-                }
-              }
+              await handleDir(entry, browserPrefix, ctx, distDir)
+              break
             }
             default: {
-              const loggableEntry = await prepareArgs(entry, ctx, distDir)
-              const loggableEntryWithStack = await withStack(
-                {
-                  original: loggableEntry,
-                  stack: entry.consoleMethodStack,
-                },
-                ctx,
-                distDir
-              )
-              const consoleMethod =
-                forwardConsole[entry.method] || forwardConsole.log
-              consoleMethod(browserPrefix, ...loggableEntryWithStack)
+              await handleDefaultConsole(entry, browserPrefix, ctx, distDir)
             }
           }
           break
         }
-        case 'console-error':
+        case 'any-logged-error': {
+          const consoleArgs = await prepareConsoleErrorArgs(entry, ctx, distDir)
+          forwardConsole.error(browserPrefix, ...consoleArgs)
+          break
+        }
         case 'formatted-error': {
-          const browserPrefix = baseBrowserPrefix
-          const consoleErrorArgs = await prepareArgs(entry, ctx, distDir)
-          forwardConsole.error(browserPrefix, ...consoleErrorArgs)
+          const formattedArgs = await prepareFormattedErrorArgs(
+            entry,
+            ctx,
+            distDir
+          )
+          forwardConsole.error(browserPrefix, ...formattedArgs)
           break
         }
       }
     } catch {
       switch (entry.kind) {
-        case 'console-error':
+        case 'any-logged-error':
         case 'console': {
-          const browserPrefix = baseBrowserPrefix
           const consoleMethod =
             forwardConsole[entry.method] || forwardConsole.log
           // @ts-expect-error todo fix this its wrong, its completely random data and type erroring
@@ -352,7 +343,6 @@ export async function receiveEvent(
           break
         }
         case 'formatted-error': {
-          const browserPrefix = baseBrowserPrefix
           forwardConsole.error(browserPrefix, `${entry.prefix}\n`, entry.stack)
           break
         }
@@ -397,7 +387,7 @@ export async function receiveBrowserLogsWebpack(opts: {
     rootDirectory,
   }
 
-  await receiveEvent(entries, ctx, distDir)
+  await handleLog(entries, ctx, distDir)
 }
 
 export async function receiveBrowserLogsTurbopack(opts: {
@@ -423,5 +413,5 @@ export async function receiveBrowserLogsTurbopack(opts: {
     isAppDirectory,
   }
 
-  await receiveEvent(entries, ctx, distDir)
+  await handleLog(entries, ctx, distDir)
 }

@@ -6,13 +6,15 @@ import {
   setOwnerStackIfAvailable,
 } from './errors/stitched-error'
 import { getErrorSource } from '../../../shared/lib/error-source'
-import type {
-  ConsoleEntry,
-  ConsoleErrorEntry,
-  FormattedErrorEntry,
-  LogEntry,
-  LogMethod,
-} from '../../shared/forward-logs-types'
+import { getTerminalLoggingConfig } from './terminal-logging-config'
+import {
+  type ConsoleEntry,
+  type ConsoleErrorEntry,
+  type FormattedErrorEntry,
+  type LogEntry,
+  type LogMethod,
+  UNDEFINED_MARKER,
+} from '../../shared/forward-logs-shared'
 
 export const PROMISE_MARKER = 'Promise {}'
 export const UNAVAILABLE_MARKER = '[Unable to view]'
@@ -59,16 +61,17 @@ export function safeClone<T>(value: T, seen = new WeakMap()): any {
   return Object.prototype.toString.call(value)
 }
 
-export const UNDEFINED_MARKER = '__next_tagged_undefined'
-const replacer = (_k: string, v: unknown) => {
-  return v === undefined ? UNDEFINED_MARKER : v
-}
+// Parse the terminal logging config from environment
+const terminalLoggingConfig = getTerminalLoggingConfig()
 
-const stringify = configure({ maximumDepth: Number.MAX_SAFE_INTEGER }) // todo: allow user to config
-// ternary since stringify(undefined) wont be handled by the replacer
+const stringify = configure({
+  maximumDepth:
+    typeof terminalLoggingConfig === 'object' &&
+    terminalLoggingConfig.serializationDepth
+      ? terminalLoggingConfig.serializationDepth
+      : Number.MAX_SAFE_INTEGER,
+})
 export const logStringify = (data: unknown): string => {
-  // try {
-  // return data === undefined ? UNDEFINED_MARKER : stringify(data, replacer)
   try {
     const result = stringify(safeClone(data))
     return result ?? '[unable to serialize]'
@@ -76,11 +79,6 @@ export const logStringify = (data: unknown): string => {
     // todo document: what safe stable stringify logs on failure
     return '[unable to serialize, circular reference is too complex to analyze]'
   }
-  // } catch {
-  //   // i wish safe stable stringify handled this at a granular level, but not much we can do
-  //   // this is what will be shown to user
-  //   return '[unable to access data]'
-  // }
 }
 
 let isPatched = false
@@ -215,7 +213,7 @@ export const forwardErrorLog = (args: any[]) => {
   const cleanStack = stackLines?.slice(2).join('\n')
 
   const entry: ConsoleErrorEntry = {
-    kind: 'console-error',
+    kind: 'any-logged-error',
     method: 'error',
     consoleErrorStack: cleanStack ?? '',
     args: args.map((arg) => {
@@ -283,7 +281,7 @@ const createUnhandledRejectionErrorEntry = (
 
 const createUnhandledRejectionNonErrorEntry = (reason: unknown) => {
   const entry: LogEntry = {
-    kind: 'console-error',
+    kind: 'any-logged-error',
     // we can't access the stack since the event is dispatched async and creating an inline error would be meaningless
     consoleErrorStack: '',
     method: 'error',
@@ -382,7 +380,6 @@ export const patchLogs = (router: 'app' | 'pages'): void => {
     'warn',
     'debug',
     'table',
-    'error',
     'assert',
     'dir',
     'dirxml',

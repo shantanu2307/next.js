@@ -16,6 +16,7 @@ import {
   logUnhandledRejection,
   forwardErrorLog,
 } from '../app/forward-logs'
+import { isTerminalLoggingEnabled } from '../app/terminal-logging-config'
 
 const usePagesDevOverlayBridge = () => {
   React.useInsertionEffect(() => {
@@ -125,7 +126,10 @@ export function register() {
 
   console.log('patching logs on pages side')
 
-  patchLogs('pages')
+  // Only initialize browser logs forwarding if enabled
+  if (isTerminalLoggingEnabled()) {
+    patchLogs('pages')
+  }
   window.addEventListener('error', onUnhandledError)
   window.addEventListener('unhandledrejection', onUnhandledRejection)
   window.console.error = nextJsHandleConsoleError

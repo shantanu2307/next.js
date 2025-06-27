@@ -1,5 +1,3 @@
-// wtf is the point of this file
-// not actually shared fire
 export type LogMethod =
   | 'log'
   | 'info'
@@ -33,7 +31,7 @@ export type ConsoleEntry = {
 }
 
 export type ConsoleErrorEntry = {
-  kind: 'console-error'
+  kind: 'any-logged-error'
   method: 'error'
   consoleErrorStack: string
   args: Array<
@@ -58,3 +56,5 @@ export type FormattedErrorEntry = {
 }
 
 export type LogEntry = ConsoleEntry | ConsoleErrorEntry | FormattedErrorEntry
+
+export const UNDEFINED_MARKER = '__next_tagged_undefined'
