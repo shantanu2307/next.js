@@ -102,6 +102,25 @@ describe(`Terminal Logging (${bundlerName})`, () => {
       await browser.close()
     })
 
+    it('should respect default depth limit of 5', async () => {
+      const browser = await webdriver(next.url, '/deep-objects')
+
+      await browser.waitForElementByCss('#deep-button')
+      await browser.elementByCss('#deep-button').click()
+
+      await retry(() => {
+        const logOutput = logs.join('')
+        expect(logOutput).toContain('[browser]')
+        expect(logOutput).toContain('Deep object')
+        expect(logOutput).toContain('level1')
+        expect(logOutput).toContain('level2')
+        expect(logOutput).toContain('level3')
+        expect(logOutput).toContain('level4')
+      })
+
+      await browser.close()
+    })
+
     it('should handle circular references safely', async () => {
       const browser = await webdriver(next.url, '/circular-refs')
 
@@ -370,7 +389,7 @@ describe(`Terminal Logging (${bundlerName})`, () => {
             module.exports = {
               experimental: {
                 browserDebugInfoInTerminal: {
-                  logDepth: 2
+                  depthLimit: 2
                 }
               }
             }
@@ -401,6 +420,106 @@ describe(`Terminal Logging (${bundlerName})`, () => {
         expect(logOutput).toContain('level1')
         expect(logOutput).toContain('level2')
         expect(logOutput).not.toContain('level4')
+      })
+
+      await browser.close()
+    })
+  })
+
+  describe('with edge limit configuration', () => {
+    let next: NextInstance
+    let logs: string[] = []
+    let originalStdout: typeof process.stdout.write
+    let originalStderr: typeof process.stderr.write
+
+    beforeAll(async () => {
+      originalStdout = process.stdout.write
+      originalStderr = process.stderr.write
+
+      const capture = (chunk: any) => {
+        logs.push(stripAnsi(chunk.toString()))
+        return true
+      }
+
+      process.stdout.write = function (chunk: any) {
+        capture(chunk)
+        return originalStdout.call(this, chunk)
+      }
+
+      process.stderr.write = function (chunk: any) {
+        capture(chunk)
+        return originalStderr.call(this, chunk)
+      }
+
+      next = await createNext({
+        files: {
+          pages: new FileRef(join(__dirname, 'fixtures/pages')),
+          'next.config.js': `
+            module.exports = {
+              experimental: {
+                browserDebugInfoInTerminal: {
+                  edgeLimit: 10
+                }
+              }
+            }
+          `,
+        },
+      })
+    })
+
+    afterAll(async () => {
+      process.stdout.write = originalStdout
+      process.stderr.write = originalStderr
+      await next.destroy()
+    })
+
+    beforeEach(() => {
+      logs = []
+    })
+
+    it(`should respect edge limit for arrays (${bundlerName})`, async () => {
+      const browser = await webdriver(next.url, '/edge-limit')
+
+      await browser.waitForElementByCss('#large-array-button')
+      await browser.elementByCss('#large-array-button').click()
+
+      await retry(() => {
+        const logOutput = logs.join('\n')
+        const terminalLogsFromBrowser = logOutput
+          .split('\n')
+          .filter((line) => line.includes('[browser]'))
+          .join('\n')
+
+        expect(terminalLogsFromBrowser).toContain('[browser]')
+        expect(terminalLogsFromBrowser).toContain('Large array:')
+        expect(logOutput).toMatch(/items not stringified/)
+        expect(terminalLogsFromBrowser).toContain('item0')
+        expect(terminalLogsFromBrowser).not.toContain('item10')
+        expect(terminalLogsFromBrowser).not.toContain('item100')
+      })
+
+      await browser.close()
+    })
+
+    it(`should respect edge limit for objects (${bundlerName})`, async () => {
+      const browser = await webdriver(next.url, '/edge-limit')
+
+      await browser.waitForElementByCss('#large-object-button')
+      await browser.elementByCss('#large-object-button').click()
+
+      await retry(() => {
+        const logOutput = logs.join('\n')
+        const terminalLogsFromBrowser = logOutput
+          .split('\n')
+          .filter((line) => line.includes('[browser]'))
+          .join('\n')
+
+        expect(terminalLogsFromBrowser).toContain('[browser]')
+        expect(terminalLogsFromBrowser).toContain('Large object:')
+        expect(logOutput).toMatch(/items not stringified/)
+        expect(terminalLogsFromBrowser).toContain('prop0')
+        expect(terminalLogsFromBrowser).not.toContain('prop50')
+        expect(terminalLogsFromBrowser).not.toContain('prop100')
       })
 
       await browser.close()

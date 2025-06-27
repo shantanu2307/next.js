@@ -753,10 +753,16 @@ export interface ExperimentalConfig {
     | boolean
     | {
         /**
-         * Maximum depth for logging nested objects in the terminal.
-         * @default Number.MAX_SAFE_INTEGER
+         * Option to limit stringification at a specific nesting depth when logging circular objects.
+         * @default 5
          */
-        logDepth?: number
+        depthLimit?: number
+
+        /**
+         * Maximum number of properties/elements to stringify when logging objects/arrays with circular references.
+         * @default 100
+         */
+        edgeLimit?: number
         /**
          * Whether to include source location information in debug output when available
          */

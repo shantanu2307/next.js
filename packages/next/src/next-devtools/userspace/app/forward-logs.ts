@@ -19,6 +19,18 @@ const terminalLoggingConfig = getTerminalLoggingConfig()
 export const PROMISE_MARKER = 'Promise {}'
 export const UNAVAILABLE_MARKER = '[Unable to view]'
 
+const stringify = configure({
+  maximumDepth:
+    typeof terminalLoggingConfig === 'object' &&
+    terminalLoggingConfig.depthLimit
+      ? terminalLoggingConfig.depthLimit
+      : 5,
+  maximumBreadth:
+    typeof terminalLoggingConfig === 'object' && terminalLoggingConfig.edgeLimit
+      ? terminalLoggingConfig.edgeLimit
+      : 100,
+})
+
 const methods: Array<LogMethod> = [
   'log',
   'info',
@@ -80,12 +92,6 @@ export function safeClone<T>(value: T, seen = new WeakMap()): any {
   return Object.prototype.toString.call(value)
 }
 
-const stringify = configure({
-  maximumDepth:
-    typeof terminalLoggingConfig === 'object' && terminalLoggingConfig.logDepth
-      ? terminalLoggingConfig.logDepth
-      : Number.MAX_SAFE_INTEGER,
-})
 export const logStringify = (data: unknown): string => {
   try {
     const result = stringify(safeClone(data))

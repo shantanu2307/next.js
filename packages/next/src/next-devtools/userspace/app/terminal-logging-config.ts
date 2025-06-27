@@ -2,7 +2,8 @@ export function getTerminalLoggingConfig():
   | false
   | boolean
   | {
-      logDepth?: number
+      depthLimit?: number
+      edgeLimit?: number
       showSourceLocation?: boolean
     } {
   try {

@@ -506,7 +506,8 @@ export const configSchema: zod.ZodType<NextConfig> = z.lazy(() =>
           .union([
             z.boolean(),
             z.object({
-              logDepth: z.number().int().positive().optional(),
+              depthLimit: z.number().int().positive().optional(),
+              edgeLimit: z.number().int().positive().optional(),
               showSourceLocation: z.boolean().optional(),
             }),
           ])

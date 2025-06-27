@@ -352,4 +352,59 @@ describe('forward-logs serialization', () => {
       expect(typeof result).toBe('string')
     })
   })
+
+  describe('edge limit handling', () => {
+    it('should respect default edge limit for array elements', () => {
+      const largeArray = Array.from({ length: 150 }, (_, i) => i)
+      const result = logStringify(largeArray)
+
+      expect(result).toContain('[')
+      expect(result).toContain(']')
+
+      const parsed = JSON.parse(result)
+      expect(Array.isArray(parsed)).toBe(true)
+      expect(parsed.length).toBe(101)
+    })
+
+    it('should respect default edge limit for object properties', () => {
+      const largeObject: Record<string, number> = {}
+      for (let i = 0; i < 150; i++) {
+        largeObject[`prop${i}`] = i
+      }
+      const result = logStringify(largeObject)
+      expect(result).toContain('{')
+      expect(result).toContain('}')
+
+      const parsed = JSON.parse(result)
+      expect(Object.keys(parsed).length).toBe(101)
+    })
+
+    it('should handle arrays within edge limit', () => {
+      const smallArray = Array.from({ length: 50 }, (_, i) => i)
+      const result = logStringify(smallArray)
+      const parsed = JSON.parse(result)
+      expect(parsed.length).toBe(50)
+    })
+  })
+
+  describe('depth limit handling', () => {
+    it('should respect default depth limit of 5', () => {
+      let deepObj: any = { value: 'bottom' }
+      for (let i = 0; i < 5; i++) {
+        deepObj = { level: i, nested: deepObj }
+      }
+
+      const result = logStringify(deepObj)
+      expect(result).toContain('level')
+      expect(result).toContain('nested')
+
+      expect(result).toContain('"level":0')
+      expect(result).toContain('"level":1')
+      expect(result).toContain('"level":2')
+      expect(result).toContain('"level":3')
+      expect(result).toContain('"level":4')
+
+      expect(result).not.toContain('bottom')
+    })
+  })
 })
