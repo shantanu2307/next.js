@@ -332,8 +332,6 @@ async function nativeTraceSource(
   return undefined
 }
 
-// mark: relevant fn for source maps
-// todo: need to do for webpack as well
 async function createOriginalStackFrame(
   project: Project,
   projectPath: string,
@@ -403,30 +401,14 @@ export function getOverlayMiddleware({
       })
 
       const request = JSON.parse(body) as OriginalStackFramesRequest
-      const stackFrames = createStackFrames(request)
-      const result: OriginalStackFramesResponse = await Promise.all(
-        stackFrames.map(async (frame) => {
-          try {
-            const stackFrame = await createOriginalStackFrame(
-              project,
-              projectPath,
-              frame
-            )
-            if (stackFrame === null) {
-              return {
-                status: 'rejected',
-                reason: 'Failed to create original stack frame',
-              }
-            }
-            return { status: 'fulfilled', value: stackFrame }
-          } catch (error) {
-            return {
-              status: 'rejected',
-              reason: inspect(error, { colors: false }),
-            }
-          }
-        })
-      )
+      const result = await getOriginalStackFrames({
+        project,
+        projectPath,
+        frames: request.frames,
+        isServer: request.isServer,
+        isEdgeServer: request.isEdgeServer,
+        isAppDirectory: request.isAppDirectory,
+      })
 
       return middlewareResponse.json(res, result)
     } else if (pathname === '/__nextjs_launch-editor') {
@@ -557,8 +539,6 @@ export async function getOriginalStackFrames({
           projectPath,
           frame
         )
-        stackFrame?.originalCodeFrame
-        stackFrame?.originalStackFrame
         if (stackFrame === null) {
           return {
             status: 'rejected',
