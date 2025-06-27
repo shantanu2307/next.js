@@ -757,6 +757,9 @@ export interface ExperimentalConfig {
          * @default Number.MAX_SAFE_INTEGER
          */
         logDepth?: number
+        /**
+         * Whether to include source location information in debug output when available
+         */
         showSourceLocation?: boolean
       }
 }
