@@ -256,8 +256,7 @@ async function handleDir(
     try {
       consoleMethod(...loggableEntry)
     } finally {
-      // restore
-      ;(process.stdout.write as any) = originalWrite
+      process.stdout.write = originalWrite
     }
     const preserved = captured.replace(/\r?\n$/, '')
     originalWrite(`${browserPrefix}${preserved} ${location}\n`)
