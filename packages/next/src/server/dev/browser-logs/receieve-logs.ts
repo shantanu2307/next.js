@@ -280,9 +280,8 @@ async function handleDefaultConsole(
     ctx,
     distDir
   )
-  const consoleMethod =
-    (forwardConsole as any)[(entry as any).method] || forwardConsole.log
-  consoleMethod(browserPrefix, ...withStackEntry)
+  const consoleMethod = forwardConsole[entry.method] || forwardConsole.log
+  ;(consoleMethod as (...args: any[]) => void)(browserPrefix, ...withStackEntry)
 }
 
 export async function handleLog(
