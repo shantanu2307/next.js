@@ -249,7 +249,7 @@ function formatStackFrame(frame: StackFrame): string {
   return `    at ${functionName} (${location})`
 }
 
-export const withStack = async (
+export const withLocation = async (
   {
     original,
     stack,

@@ -4,7 +4,7 @@ import util from 'util'
 import {
   getConsoleLocation,
   getSourceMappedStackFrames,
-  withStack,
+  withLocation,
   type MappingContext,
 } from './source-map'
 import {
@@ -321,7 +321,7 @@ async function handleDefaultConsole(
   config: boolean | { logDepth?: number; showSourceLocation?: boolean }
 ) {
   const loggableEntry = await prepareConsoleArgs(entry, ctx, distDir)
-  const withStackEntry = await withStack(
+  const withStackEntry = await withLocation(
     {
       original: loggableEntry,
       stack: (entry as any).consoleMethodStack || null,
