@@ -762,8 +762,9 @@ export async function createHotReloaderTurbopack(
         })
 
         client.addEventListener('message', async ({ data }) => {
-          const stringData = typeof data !== 'string' ? data.toString() : data
-          const parsedData = JSON.parse(stringData)
+          const parsedData = JSON.parse(
+            typeof data !== 'string' ? data.toString() : data
+          )
 
           // Next.js messages
           switch (parsedData.event) {
