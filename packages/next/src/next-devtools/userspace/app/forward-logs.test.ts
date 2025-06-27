@@ -1,14 +1,16 @@
+import { UNDEFINED_MARKER } from '../../shared/forward-logs-shared'
 import {
   safeClone,
   logStringify,
   PROMISE_MARKER,
   UNAVAILABLE_MARKER,
-  UNDEFINED_MARKER,
 } from './forward-logs'
 
 describe('forward-logs serialization', () => {
   describe('safeClone', () => {
     it('should handle undefined values', () => {
+      console.log('this is what we expect, right?', safeClone(undefined))
+
       expect(safeClone(undefined)).toBe(UNDEFINED_MARKER)
     })
 
@@ -40,7 +42,7 @@ describe('forward-logs serialization', () => {
       obj.self = obj
       const cloned = safeClone(obj)
       expect(cloned.a).toBe(1)
-      expect(cloned.self).toBe(cloned) // Should reference the cloned object
+      expect(cloned.self).toBe(cloned)
     })
 
     it('should handle complex circular references', () => {
@@ -62,7 +64,7 @@ describe('forward-logs serialization', () => {
 
     it('should handle async functions', () => {
       const asyncFn = async () => 42
-      expect(safeClone(asyncFn)).toBe(asyncFn) // Functions are primitives and return as-is
+      expect(safeClone(asyncFn)).toBe(asyncFn)
     })
 
     it('should handle arrays', () => {
@@ -122,13 +124,13 @@ describe('forward-logs serialization', () => {
         return 42
       }
       const cloned = safeClone(fn)
-      expect(cloned).toBe(fn) // Functions are primitives and return as-is
+      expect(cloned).toBe(fn)
     })
 
     it('should handle arrow functions', () => {
       const arrowFn = () => 42
       const cloned = safeClone(arrowFn)
-      expect(cloned).toBe(arrowFn) // Functions are primitives and return as-is
+      expect(cloned).toBe(arrowFn)
     })
 
     it('should handle Date objects', () => {
@@ -188,20 +190,19 @@ describe('forward-logs serialization', () => {
     it('should handle symbols', () => {
       const symbol = Symbol('test')
       const cloned = safeClone(symbol)
-      expect(cloned).toBe(symbol) // Symbols are primitives
+      expect(cloned).toBe(symbol)
     })
 
     it('should handle BigInt', () => {
       const bigInt = BigInt('123456789012345678901234567890')
       const cloned = safeClone(bigInt)
-      expect(cloned).toBe(bigInt) // BigInt is primitive
+      expect(cloned).toBe(bigInt)
     })
 
     it('should handle objects with symbol keys', () => {
       const sym = Symbol('key')
       const obj = { [sym]: 'value', normalKey: 'normal' }
       const cloned = safeClone(obj)
-      // Symbol keys should be ignored by Object.keys()
       expect(cloned).toEqual({ normalKey: 'normal' })
     })
 
@@ -238,7 +239,7 @@ describe('forward-logs serialization', () => {
 
       const instance = new Child()
       const cloned = safeClone(instance)
-      expect(cloned).toBe('[object Object]') // Should fall back to toString
+      expect(cloned).toBe('[object Object]')
     })
 
     it('should handle mixed complex scenarios', () => {
@@ -303,7 +304,6 @@ describe('forward-logs serialization', () => {
       const obj: any = { a: 1 }
       obj.self = obj
       const result = logStringify(obj)
-      // Should not throw and should return a string
       expect(typeof result).toBe('string')
     })
 
@@ -348,7 +348,6 @@ describe('forward-logs serialization', () => {
         },
       }
 
-      // This should not crash the serialization
       const result = logStringify(obj)
       expect(typeof result).toBe('string')
     })
