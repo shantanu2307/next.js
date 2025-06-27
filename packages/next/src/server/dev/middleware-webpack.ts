@@ -177,7 +177,6 @@ function findOriginalSourcePositionAndContentFromCompilation(
   return module?.buildInfo?.importLocByPath?.get(importedModule) ?? null
 }
 
-// mark: relevant function
 export async function createOriginalStackFrame({
   source,
   rootDirectory,
