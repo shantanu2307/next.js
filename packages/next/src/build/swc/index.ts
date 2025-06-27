@@ -41,6 +41,8 @@ import type {
   WrittenEndpoint,
 } from './types'
 import { TurbopackInternalError } from '../../shared/lib/turbopack/utils'
+import { traceGlobals } from '../../trace/shared'
+import { eventErrorThrown } from '../../telemetry/events'
 
 type RawBindings = typeof import('./generated-native')
 type RawWasmBindings = typeof import('./generated-wasm') & {
@@ -536,14 +538,6 @@ function bindingToApi(
     throw new Error(`Invariant: ${computeMessage(never)}`)
   }
 
-  async function withErrorCause<T>(fn: () => Promise<T>): Promise<T> {
-    try {
-      return await fn()
-    } catch (nativeError: any) {
-      throw TurbopackInternalError.createAndRecordTelemetry(nativeError)
-    }
-  }
-
   /**
    * Calls a native function and streams the result.
    * If useBuffer is true, all values will be preserved, potentially buffered
@@ -589,9 +583,7 @@ function bindingToApi(
     }
 
     async function* createIterator() {
-      const task = await withErrorCause<{ __napiType: 'RootTask' } | void>(() =>
-        nativeFunction(emitResult)
-      )
+      const task = await nativeFunction(emitResult)
       try {
         while (!canceled) {
           if (buffer.length > 0) {
@@ -607,9 +599,6 @@ function bindingToApi(
         }
       } catch (e) {
         if (e === cancel) return
-        if (e instanceof Error) {
-          throw TurbopackInternalError.createAndRecordTelemetry(e)
-        }
         throw e
       } finally {
         if (task) {
@@ -662,25 +651,21 @@ function bindingToApi(
     }
 
     async update(options: Partial<ProjectOptions>) {
-      await withErrorCause(async () =>
-        binding.projectUpdate(
-          this._nativeProject,
-          await rustifyPartialProjectOptions(options)
-        )
+      await binding.projectUpdate(
+        this._nativeProject,
+        await rustifyPartialProjectOptions(options)
       )
     }
 
     async writeAllEntrypointsToDisk(
       appDirOnly: boolean
     ): Promise<TurbopackResult<RawEntrypoints>> {
-      return await withErrorCause(async () => {
-        const napiEndpoints = (await binding.projectWriteAllEntrypointsToDisk(
-          this._nativeProject,
-          appDirOnly
-        )) as TurbopackResult<NapiEntrypoints>
+      const napiEndpoints = (await binding.projectWriteAllEntrypointsToDisk(
+        this._nativeProject,
+        appDirOnly
+      )) as TurbopackResult<NapiEntrypoints>
 
-        return napiEntrypointsToRawEntrypoints(napiEndpoints)
-      })
+      return napiEntrypointsToRawEntrypoints(napiEndpoints)
     }
 
     entrypointsSubscribe() {
@@ -777,22 +762,16 @@ function bindingToApi(
     }
 
     async writeToDisk(): Promise<TurbopackResult<WrittenEndpoint>> {
-      return await withErrorCause(
-        () =>
-          binding.endpointWriteToDisk(this._nativeEndpoint) as Promise<
-            TurbopackResult<WrittenEndpoint>
-          >
-      )
+      return (await binding.endpointWriteToDisk(
+        this._nativeEndpoint
+      )) as TurbopackResult<WrittenEndpoint>
     }
 
     async clientChanged(): Promise<AsyncIterableIterator<TurbopackResult<{}>>> {
       const clientSubscription = subscribe<TurbopackResult>(
         false,
         async (callback) =>
-          binding.endpointClientChangedSubscribe(
-            await this._nativeEndpoint,
-            callback
-          )
+          binding.endpointClientChangedSubscribe(this._nativeEndpoint, callback)
       )
       await clientSubscription.next()
       return clientSubscription
@@ -805,7 +784,7 @@ function bindingToApi(
         false,
         async (callback) =>
           binding.endpointServerChangedSubscribe(
-            await this._nativeEndpoint,
+            this._nativeEndpoint,
             includeIssues,
             callback
           )
@@ -1085,7 +1064,22 @@ function bindingToApi(
     return new ProjectImpl(
       await binding.projectNew(
         await rustifyProjectOptions(options),
-        turboEngineOptions || {}
+        turboEngineOptions || {},
+        {
+          throwTurbopackInternalError(
+            message: string,
+            anonymizedLocation: string | null
+          ): never {
+            const err = new TurbopackInternalError(message, anonymizedLocation)
+            const telemetry = traceGlobals.get('telemetry')
+            if (telemetry) {
+              telemetry.record(eventErrorThrown(err, anonymizedLocation))
+            } else {
+              console.error('Expected `telemetry` to be set in globals')
+            }
+            throw err
+          },
+        }
       )
     )
   }

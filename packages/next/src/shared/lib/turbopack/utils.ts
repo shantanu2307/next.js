@@ -15,8 +15,6 @@ import type { EntryKey } from './entry-key'
 import * as Log from '../../../build/output/log'
 import type { NextConfigComplete } from '../../../server/config-shared'
 import loadJsConfig from '../../../build/load-jsconfig'
-import { eventErrorThrown } from '../../../telemetry/events'
-import { traceGlobals } from '../../../trace/shared'
 
 type IssueKey = `${Issue['severity']}-${Issue['filePath']}-${string}-${string}`
 export type IssuesMap = Map<IssueKey, Issue>
@@ -33,26 +31,14 @@ export class ModuleBuildError extends Error {
 // to a log file and details should not be shown to the user.
 export class TurbopackInternalError extends Error {
   name = 'TurbopackInternalError'
+  location: string | null
 
   // Manually set this as this isn't statically determinable
   __NEXT_ERROR_CODE = 'TurbopackInternalError'
 
-  static createAndRecordTelemetry(cause: Error) {
-    const error = new TurbopackInternalError(cause)
-
-    const telemetry = traceGlobals.get('telemetry')
-    if (telemetry) {
-      telemetry.record(eventErrorThrown(error))
-    } else {
-      console.error('Expected `telemetry` to be set in globals')
-    }
-
-    return error
-  }
-
-  constructor(cause: Error) {
-    super(cause.message)
-    this.stack = cause.stack
+  constructor(message: string, location: string | null) {
+    super(message)
+    this.location = location
   }
 }
 

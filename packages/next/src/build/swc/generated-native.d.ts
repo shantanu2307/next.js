@@ -204,7 +204,8 @@ export interface NapiTurboEngineOptions {
 }
 export declare function projectNew(
   options: NapiProjectOptions,
-  turboEngineOptions: NapiTurboEngineOptions
+  turboEngineOptions: NapiTurboEngineOptions,
+  napiCallbacks: NapiNextTurbopackCallbacksJsObject
 ): Promise<{ __napiType: 'Project' }>
 export declare function projectUpdate(
   project: { __napiType: 'Project' },
@@ -350,6 +351,18 @@ export declare function projectGetSourceMapSync(
   project: { __napiType: 'Project' },
   filePath: RcStr
 ): string | null
+/**
+ * A version of [`NapiNextTurbopackCallbacks`] that can accepted as an argument to a napi function.
+ *
+ * This can be converted into a [`NapiNextTurbopackCallbacks`] with
+ * [`NapiNextTurbopackCallbacks::from_js`].
+ */
+export interface NapiNextTurbopackCallbacksJsObject {
+  throwTurbopackInternalError: (
+    message: string,
+    location: string | null
+  ) => never
+}
 export declare function rootTaskDispose(rootTask: {
   __napiType: 'RootTask'
 }): void
