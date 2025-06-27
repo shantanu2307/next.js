@@ -141,8 +141,14 @@ async function getSourceMappedStackFramesInternal(
         }
 
         const { originalStackFrame, originalCodeFrame } = result.value
-        // chrome-extension://<...> we should ignore this, why aren't we, are we are and im missing something
         if (originalStackFrame?.ignored && ignore) {
+          return {
+            kind: 'ignored' as const,
+          }
+        }
+
+        // should we apply this generally to dev overlay (dev overlay does not ignore chrome-extension://)
+        if (originalStackFrame?.file?.startsWith('chrome-extension://')) {
           return {
             kind: 'ignored' as const,
           }

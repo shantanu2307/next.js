@@ -117,6 +117,33 @@ const colorError = (
   mapped satisfies never
 }
 
+function processConsoleFormatStrings(args: any[]): any[] {
+  /**
+   * this handles the case formatting is applied to the console log
+   * otherwise we will see the format specifier directly in the terminal output
+   */
+  if (args.length > 0 && typeof args[0] === 'string') {
+    const formatString = args[0]
+    if (
+      formatString.includes('%s') ||
+      formatString.includes('%d') ||
+      formatString.includes('%i') ||
+      formatString.includes('%f') ||
+      formatString.includes('%o') ||
+      formatString.includes('%O') ||
+      formatString.includes('%c')
+    ) {
+      try {
+        const formatted = util.format(...args)
+        return [formatted]
+      } catch {
+        return args
+      }
+    }
+  }
+  return args
+}
+
 async function prepareFormattedErrorArgs(
   entry: Extract<LogEntry, { kind: 'formatted-error' }>,
   ctx: MappingContext,
@@ -145,7 +172,8 @@ async function prepareConsoleArgs(
       return colorError(mapped, { prefix: arg.prefix, applyColor: false })
     })
   )
-  return deserialized
+
+  return processConsoleFormatStrings(deserialized)
 }
 
 async function prepareConsoleErrorArgs(
@@ -166,17 +194,22 @@ async function prepareConsoleErrorArgs(
   )
 
   if (entry.args.some((a) => a.kind === 'formatted-error-arg')) {
-    return deserialized
+    return processConsoleFormatStrings(deserialized)
   }
   const mappedStack = await getSourceMappedStackFrames(
     entry.consoleErrorStack,
     ctx,
     distDir
   )
-  return [...deserialized, colorError(mappedStack)]
+  return [...processConsoleFormatStrings(deserialized), colorError(mappedStack)]
 }
 
-async function handleTable(entry: ConsoleEntry, browserPrefix: string) {
+async function handleTable(
+  entry: ConsoleEntry,
+  browserPrefix: string,
+  ctx: MappingContext,
+  distDir: string
+) {
   const deserializedArgs = await Promise.all(
     entry.args.map(async (arg: any) => {
       if (arg.kind === 'formatted-error-arg') {
@@ -185,9 +218,25 @@ async function handleTable(entry: ConsoleEntry, browserPrefix: string) {
       return deserializeArgData(arg.data)
     })
   )
+
+  const location = await (async () => {
+    if (!entry.consoleMethodStack) {
+      return
+    }
+    const frames = await getSourceMappedStackFrames(
+      entry.consoleMethodStack,
+      ctx,
+      distDir
+    )
+    return getConsoleLocation(frames)
+  })()
+
   // we can't inline pass browser prefix, but it looks better multiline for table anyways
   forwardConsole.log(browserPrefix)
   forwardConsole.table(...deserializedArgs)
+  if (location) {
+    forwardConsole.log(dim(`(${location})`))
+  }
 }
 
 async function handleTrace(
@@ -299,7 +348,7 @@ export async function handleLog(
         case 'console': {
           switch (entry.method) {
             case 'table': {
-              await handleTable(entry, browserPrefix)
+              await handleTable(entry, browserPrefix, ctx, distDir)
               break
             }
             case 'trace': {
