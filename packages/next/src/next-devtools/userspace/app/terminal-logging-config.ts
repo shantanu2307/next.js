@@ -1,7 +1,3 @@
-/**
- * Parse the terminal logging config from environment variables
- * Returns false if disabled, or the config object if enabled
- */
 export function getTerminalLoggingConfig():
   | false
   | boolean
@@ -13,9 +9,6 @@ export function getTerminalLoggingConfig():
   }
 }
 
-/**
- * Check if terminal logging is enabled
- */
 export function isTerminalLoggingEnabled(): boolean {
   const config = getTerminalLoggingConfig()
   return Boolean(config)
