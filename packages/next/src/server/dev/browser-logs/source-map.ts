@@ -257,12 +257,12 @@ export const withStack = async (
   ctx: MappingContext,
   distDir: string
 ) => {
-  // if (
-  //   typeof terminalLoggingConfig === 'object' &&
-  //   terminalLoggingConfig.showSourceLocation === false
-  // ) {
-  //   return original
-  // }
+  if (
+    typeof terminalLoggingConfig === 'object' &&
+    terminalLoggingConfig.showSourceLocation === false
+  ) {
+    return original
+  }
   if (!stack) {
     return original
   }

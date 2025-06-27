@@ -326,7 +326,7 @@ describe(`Terminal Logging (${bundlerName})`, () => {
       const logOutput = logs.join('')
       expect(logOutput).toContain('[browser]')
       expect(logOutput).toContain('Hello from browser')
-      expect(logOutput).not.toMatch(/\([^)]+basic-logs\.js[:)]/) 
+      expect(logOutput).not.toMatch(/\([^)]+basic-logs\.js[:)]/)
 
       await browser.close()
     })
