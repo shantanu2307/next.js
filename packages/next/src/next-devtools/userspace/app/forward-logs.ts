@@ -71,26 +71,11 @@ const stringify = configure({
       ? terminalLoggingConfig.logDepth
       : Number.MAX_SAFE_INTEGER,
 })
-let did = false
 export const logStringify = (data: unknown): string => {
   try {
-    if (!did) {
-      // console.log('trying to serialize this', data);
-      // did = true
-      // setTimeout(() => {
-      //   console.log('throwing on ', data)
-      // })
-    }
     const result = stringify(safeClone(data))
-
     return result ?? `"${UNAVAILABLE_MARKER}"`
   } catch {
-    if (!did) {
-      did = true
-      setTimeout(() => {
-        console.log('throwing on ', data)
-      })
-    }
     return `"${UNAVAILABLE_MARKER}"`
   }
 }
