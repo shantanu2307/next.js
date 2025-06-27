@@ -345,6 +345,10 @@ export const initializeDebugLogForwarding = (router: 'app' | 'pages'): void => {
   if (isPatched) {
     return
   }
+  // todo(rob): why does this break rendering on server, important to know incase the same bug appears in browser
+  if (typeof window === 'undefined') {
+    return
+  }
 
   const methods: Array<LogMethod> = [
     'log',

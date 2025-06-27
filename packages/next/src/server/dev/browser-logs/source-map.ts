@@ -6,9 +6,6 @@ import { dim } from '../../../lib/picocolors'
 import { parseStack } from '../../lib/parse-stack'
 import path from 'path'
 import { LRUCache } from '../../lib/lru-cache'
-import { getTerminalLoggingConfig } from '../../../next-devtools/userspace/app/terminal-logging-config'
-
-const terminalLoggingConfig = getTerminalLoggingConfig()
 
 type WebpackMappingContext = {
   bundler: 'webpack'
@@ -255,12 +252,10 @@ export const withStack = async (
     stack: string | null
   },
   ctx: MappingContext,
-  distDir: string
+  distDir: string,
+  config: boolean | { logDepth?: number; showSourceLocation?: boolean }
 ) => {
-  if (
-    typeof terminalLoggingConfig === 'object' &&
-    terminalLoggingConfig.showSourceLocation === false
-  ) {
+  if (typeof config === 'object' && config.showSourceLocation === false) {
     return original
   }
   if (!stack) {

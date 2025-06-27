@@ -63,15 +63,7 @@ const forwardConsole: typeof console = {
             arg === null
               ? arg
               : // we hardcode depth:Infinity to allow the true depth to be configured by the serialization done in the browser (which is controlled by user)
-                (() => {
-                  try {
-                    return util.inspect(arg, { depth: Infinity, colors: true })
-                  } catch (e) {
-                    console.error('util.inspect failed on:', arg)
-                    console.error('Error:', e)
-                    return '[Failed to inspect: ' + String(e) + ']'
-                  }
-                })()
+                util.inspect(arg, { depth: Infinity, colors: true })
           )
         ),
     ])
@@ -277,7 +269,8 @@ async function handleDefaultConsole(
   entry: ConsoleEntry,
   browserPrefix: string,
   ctx: MappingContext,
-  distDir: string
+  distDir: string,
+  config: boolean | { logDepth?: number; showSourceLocation?: boolean }
 ) {
   const loggableEntry = await prepareConsoleArgs(entry, ctx, distDir)
   const withStackEntry = await withStack(
@@ -286,7 +279,8 @@ async function handleDefaultConsole(
       stack: (entry as any).consoleMethodStack || null,
     },
     ctx,
-    distDir
+    distDir,
+    config
   )
   const consoleMethod = forwardConsole[entry.method] || forwardConsole.log
   ;(consoleMethod as (...args: any[]) => void)(browserPrefix, ...withStackEntry)
@@ -295,7 +289,8 @@ async function handleDefaultConsole(
 export async function handleLog(
   entries: LogEntry[],
   ctx: MappingContext,
-  distDir: string
+  distDir: string,
+  config: boolean | { logDepth?: number; showSourceLocation?: boolean }
 ): Promise<void> {
   const browserPrefix = cyan('[browser]')
 
@@ -317,7 +312,13 @@ export async function handleLog(
               break
             }
             default: {
-              await handleDefaultConsole(entry, browserPrefix, ctx, distDir)
+              await handleDefaultConsole(
+                entry,
+                browserPrefix,
+                ctx,
+                distDir,
+                config
+              )
             }
           }
           break
@@ -379,6 +380,7 @@ export async function receiveBrowserLogsWebpack(opts: {
   edgeServerStats: () => any
   rootDirectory: string
   distDir: string
+  config: boolean | { logDepth?: number; showSourceLocation?: boolean }
 }): Promise<void> {
   const {
     entries,
@@ -406,7 +408,7 @@ export async function receiveBrowserLogsWebpack(opts: {
     rootDirectory,
   }
 
-  await handleLog(entries, ctx, distDir)
+  await handleLog(entries, ctx, distDir, opts.config)
 }
 
 export async function receiveBrowserLogsTurbopack(opts: {
@@ -416,6 +418,7 @@ export async function receiveBrowserLogsTurbopack(opts: {
   project: Project
   projectPath: string
   distDir: string
+  config: boolean | { logDepth?: number; showSourceLocation?: boolean }
 }): Promise<void> {
   const { entries, router, sourceType, project, projectPath, distDir } = opts
 
@@ -432,5 +435,5 @@ export async function receiveBrowserLogsTurbopack(opts: {
     isAppDirectory,
   }
 
-  await handleLog(entries, ctx, distDir)
+  await handleLog(entries, ctx, distDir, opts.config)
 }

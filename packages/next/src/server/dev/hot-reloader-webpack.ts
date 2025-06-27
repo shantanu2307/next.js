@@ -579,6 +579,7 @@ export default class HotReloaderWebpack implements NextJsHotReloaderInterface {
                   edgeServerStats: () => this.edgeServerStats,
                   rootDirectory: this.dir,
                   distDir: this.distDir,
+                  config: this.config.experimental.browserDebugInfoInTerminal,
                 })
               }
               break

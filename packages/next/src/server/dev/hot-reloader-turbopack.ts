@@ -825,6 +825,7 @@ export async function createHotReloaderTurbopack(
                   project,
                   projectPath,
                   distDir,
+                  config: nextConfig.experimental.browserDebugInfoInTerminal,
                 })
               }
               break
