@@ -7,31 +7,47 @@ import { retry } from 'next-test-utils'
 
 const bundlerName = process.env.IS_TURBOPACK_TEST ? 'Turbopack' : 'Webpack'
 
+function setupLogCapture() {
+  const logs: string[] = []
+  const originalStdout = process.stdout.write
+  const originalStderr = process.stderr.write
+
+  const capture = (chunk: any) => {
+    logs.push(stripAnsi(chunk.toString()))
+    return true
+  }
+
+  process.stdout.write = function (chunk: any) {
+    capture(chunk)
+    return originalStdout.call(this, chunk)
+  }
+
+  process.stderr.write = function (chunk: any) {
+    capture(chunk)
+    return originalStderr.call(this, chunk)
+  }
+
+  const restore = () => {
+    process.stdout.write = originalStdout
+    process.stderr.write = originalStderr
+  }
+
+  const clearLogs = () => {
+    logs.length = 0
+  }
+
+  return { logs, restore, clearLogs }
+}
+
 describe(`Terminal Logging (${bundlerName})`, () => {
   describe('when enabled', () => {
     let next: NextInstance
     let logs: string[] = []
-    let originalStdout: typeof process.stdout.write
-    let originalStderr: typeof process.stderr.write
+    let logCapture: ReturnType<typeof setupLogCapture>
 
     beforeAll(async () => {
-      originalStdout = process.stdout.write
-      originalStderr = process.stderr.write
-
-      const capture = (chunk: any) => {
-        logs.push(stripAnsi(chunk.toString()))
-        return true
-      }
-
-      process.stdout.write = function (chunk: any) {
-        capture(chunk)
-        return originalStdout.call(this, chunk)
-      }
-
-      process.stderr.write = function (chunk: any) {
-        capture(chunk)
-        return originalStderr.call(this, chunk)
-      }
+      logCapture = setupLogCapture()
+      logs = logCapture.logs
 
       next = await createNext({
         files: {
@@ -48,13 +64,12 @@ describe(`Terminal Logging (${bundlerName})`, () => {
     })
 
     afterAll(async () => {
-      process.stdout.write = originalStdout
-      process.stderr.write = originalStderr
+      logCapture.restore()
       await next.destroy()
     })
 
     beforeEach(() => {
-      logs = []
+      logCapture.clearLogs()
     })
 
     it('should forward console.log to terminal', async () => {
@@ -96,7 +111,16 @@ describe(`Terminal Logging (${bundlerName})`, () => {
         const logOutput = logs.join('')
         expect(logOutput).toContain('[browser]')
         expect(logOutput).toContain('Complex object')
-        expect(logOutput).toContain('nested')
+        expect(logOutput).toContain(`\
+{
+  array: [ 1, 2, 3 ],
+  date: '[object Date]',
+  name: 'test',
+  nested: { value: 42 },
+  nullVal: null,
+  undef: undefined
+}\
+`)
       })
 
       await browser.close()
@@ -116,6 +140,7 @@ describe(`Terminal Logging (${bundlerName})`, () => {
         expect(logOutput).toContain('level2')
         expect(logOutput).toContain('level3')
         expect(logOutput).toContain('level4')
+        expect(logOutput).toContain('cut off')
       })
 
       await browser.close()
@@ -130,8 +155,7 @@ describe(`Terminal Logging (${bundlerName})`, () => {
       await retry(() => {
         const logOutput = logs.join('')
         expect(logOutput).toContain('[browser]')
-        expect(logOutput).toContain('Circular object')
-        expect(logOutput).not.toContain('Converting circular structure to JSON')
+        expect(logOutput).toContain(`{ name: 'test', self: '[Circular]`)
       })
 
       await browser.close()
@@ -152,65 +176,35 @@ describe(`Terminal Logging (${bundlerName})`, () => {
       await browser.close()
     })
 
-    it(`should use ${bundlerName.toLowerCase()} implementation for log processing`, async () => {
-      const browser = await webdriver(next.url, '/basic-logs')
-
-      await browser.waitForElementByCss('#log-button')
-      await browser.elementByCss('#log-button').click()
-
-      await retry(() => {
-        const logOutput = logs.join('')
-        expect(logOutput).toContain('[browser]')
-        expect(logOutput).toContain('Hello from browser')
-      })
-
-      await browser.close()
-    })
-
-    it('should handle console format strings (React Strict Mode)', async () => {
+    it('should handle console format strings', async () => {
       const browser = await webdriver(next.url, '/strict-mode')
-
       await browser.waitForElementByCss('#format-string-button')
       await browser.elementByCss('#format-string-button').click()
 
       await retry(() => {
         const logOutput = logs.join('\n')
-        const terminalLogsFromBrowser = logOutput
+        const browserLogs = logOutput
           .split('\n')
           .filter((line) => line.includes('[browser]'))
 
+        expect(browserLogs.some((line) => line.includes('Normal log'))).toBe(
+          true
+        )
         expect(
-          terminalLogsFromBrowser.some((line) => line.includes('Normal log'))
-        ).toBe(true)
-        expect(
-          terminalLogsFromBrowser.some((line) =>
+          browserLogs.some((line) =>
             line.includes('Dimmed log (simulated strict mode)')
           )
         ).toBe(true)
         expect(
-          terminalLogsFromBrowser.some((line) =>
-            line.includes('Multiple 42 formats')
-          )
+          browserLogs.some((line) => line.includes('Multiple 42 formats'))
         ).toBe(true)
-        expect(
-          terminalLogsFromBrowser.some((line) => line.includes('styled log'))
-        ).toBe(true)
+        expect(browserLogs.some((line) => line.includes('styled log'))).toBe(
+          true
+        )
 
-        expect(
-          terminalLogsFromBrowser.every(
-            (line) => !line.includes('[browser] %s')
-          )
-        ).toBe(true)
-        expect(
-          terminalLogsFromBrowser.every(
-            (line) => !line.includes('[browser] %d')
-          )
-        ).toBe(true)
-        expect(
-          terminalLogsFromBrowser.every(
-            (line) => !line.includes('[browser] %c')
-          )
-        ).toBe(true)
+        expect(browserLogs.every((line) => !line.includes('%s'))).toBe(true)
+        expect(browserLogs.every((line) => !line.includes('%d'))).toBe(true)
+        expect(browserLogs.every((line) => !line.includes('%c'))).toBe(true)
       })
 
       await browser.close()
@@ -224,35 +218,25 @@ describe(`Terminal Logging (${bundlerName})`, () => {
 
       await retry(() => {
         const logOutput = logs.join('\n')
-        const terminalLogsFromBrowser = logOutput
+        const browserLogs = logOutput
           .split('\n')
           .filter((line) => line.includes('[browser]'))
 
         expect(
-          terminalLogsFromBrowser.some((line) => line.includes('String format'))
+          browserLogs.some((line) => line.includes('String format extra arg'))
         ).toBe(true)
-
         expect(
-          terminalLogsFromBrowser.some((line) =>
-            line.includes('No format string')
+          browserLogs.some((line) =>
+            line.includes('No format string but multiple args')
           )
         ).toBe(true)
         expect(
-          terminalLogsFromBrowser.some((line) =>
-            line.includes('but multiple args')
-          )
+          browserLogs.some((line) => line.includes('5 items processed'))
         ).toBe(true)
 
         expect(
-          terminalLogsFromBrowser.some((line) =>
-            line.includes('5 items processed')
-          )
-        ).toBe(true)
-
-        expect(
-          terminalLogsFromBrowser.every(
-            (line) =>
-              !line.includes('[browser] %s') && !line.includes('[browser] %d')
+          browserLogs.every(
+            (line) => !line.includes('%s') && !line.includes('%d')
           )
         ).toBe(true)
       })
@@ -268,32 +252,24 @@ describe(`Terminal Logging (${bundlerName})`, () => {
 
       await retry(() => {
         const logOutput = logs.join('\n')
-        const terminalLogsFromBrowser = logOutput
+        const browserLogs = logOutput
           .split('\n')
           .filter((line) => line.includes('[browser]'))
 
         expect(
-          terminalLogsFromBrowser.some((line) =>
-            line.includes('Error with format string')
-          )
+          browserLogs.some((line) => line.includes('Error with format string'))
         ).toBe(true)
         expect(
-          terminalLogsFromBrowser.some((line) =>
-            line.includes('Warning with 123')
-          )
+          browserLogs.some((line) => line.includes('Warning with 123'))
         ).toBe(true)
         expect(
-          terminalLogsFromBrowser.some((line) =>
+          browserLogs.some((line) =>
             line.includes('Normal error without format')
           )
         ).toBe(true)
 
-        expect(
-          terminalLogsFromBrowser.every(
-            (line) =>
-              !line.includes('[browser] %s') && !line.includes('[browser] %d')
-          )
-        ).toBe(true)
+        expect(browserLogs.every((line) => !line.includes('%s'))).toBe(true)
+        expect(browserLogs.every((line) => !line.includes('%d'))).toBe(true)
       })
 
       await browser.close()
@@ -303,27 +279,11 @@ describe(`Terminal Logging (${bundlerName})`, () => {
   describe('when disabled (default)', () => {
     let next: NextInstance
     let logs: string[] = []
-    let originalStdout: typeof process.stdout.write
-    let originalStderr: typeof process.stderr.write
+    let logCapture: ReturnType<typeof setupLogCapture>
 
     beforeAll(async () => {
-      originalStdout = process.stdout.write
-      originalStderr = process.stderr.write
-
-      const capture = (chunk: any) => {
-        logs.push(stripAnsi(chunk.toString()))
-        return true
-      }
-
-      process.stdout.write = function (chunk: any) {
-        capture(chunk)
-        return originalStdout.call(this, chunk)
-      }
-
-      process.stderr.write = function (chunk: any) {
-        capture(chunk)
-        return originalStderr.call(this, chunk)
-      }
+      logCapture = setupLogCapture()
+      logs = logCapture.logs
 
       next = await createNext({
         files: {
@@ -333,13 +293,12 @@ describe(`Terminal Logging (${bundlerName})`, () => {
     })
 
     afterAll(async () => {
-      process.stdout.write = originalStdout
-      process.stderr.write = originalStderr
+      logCapture.restore()
       await next.destroy()
     })
 
     beforeEach(() => {
-      logs = []
+      logCapture.clearLogs()
     })
 
     it(`should not forward logs when disabled (${bundlerName})`, async () => {
@@ -360,27 +319,11 @@ describe(`Terminal Logging (${bundlerName})`, () => {
   describe('with serialization depth limit', () => {
     let next: NextInstance
     let logs: string[] = []
-    let originalStdout: typeof process.stdout.write
-    let originalStderr: typeof process.stderr.write
+    let logCapture: ReturnType<typeof setupLogCapture>
 
     beforeAll(async () => {
-      originalStdout = process.stdout.write
-      originalStderr = process.stderr.write
-
-      const capture = (chunk: any) => {
-        logs.push(stripAnsi(chunk.toString()))
-        return true
-      }
-
-      process.stdout.write = function (chunk: any) {
-        capture(chunk)
-        return originalStdout.call(this, chunk)
-      }
-
-      process.stderr.write = function (chunk: any) {
-        capture(chunk)
-        return originalStderr.call(this, chunk)
-      }
+      logCapture = setupLogCapture()
+      logs = logCapture.logs
 
       next = await createNext({
         files: {
@@ -399,13 +342,12 @@ describe(`Terminal Logging (${bundlerName})`, () => {
     })
 
     afterAll(async () => {
-      process.stdout.write = originalStdout
-      process.stderr.write = originalStderr
+      logCapture.restore()
       await next.destroy()
     })
 
     beforeEach(() => {
-      logs = []
+      logCapture.clearLogs()
     })
 
     it(`should respect serialization depth limit (${bundlerName})`, async () => {
@@ -429,27 +371,11 @@ describe(`Terminal Logging (${bundlerName})`, () => {
   describe('with edge limit configuration', () => {
     let next: NextInstance
     let logs: string[] = []
-    let originalStdout: typeof process.stdout.write
-    let originalStderr: typeof process.stderr.write
+    let logCapture: ReturnType<typeof setupLogCapture>
 
     beforeAll(async () => {
-      originalStdout = process.stdout.write
-      originalStderr = process.stderr.write
-
-      const capture = (chunk: any) => {
-        logs.push(stripAnsi(chunk.toString()))
-        return true
-      }
-
-      process.stdout.write = function (chunk: any) {
-        capture(chunk)
-        return originalStdout.call(this, chunk)
-      }
-
-      process.stderr.write = function (chunk: any) {
-        capture(chunk)
-        return originalStderr.call(this, chunk)
-      }
+      logCapture = setupLogCapture()
+      logs = logCapture.logs
 
       next = await createNext({
         files: {
@@ -468,13 +394,12 @@ describe(`Terminal Logging (${bundlerName})`, () => {
     })
 
     afterAll(async () => {
-      process.stdout.write = originalStdout
-      process.stderr.write = originalStderr
+      logCapture.restore()
       await next.destroy()
     })
 
     beforeEach(() => {
-      logs = []
+      logCapture.clearLogs()
     })
 
     it(`should respect custom edge limit for arrays (${bundlerName})`, async () => {
@@ -513,26 +438,11 @@ describe(`Terminal Logging (${bundlerName})`, () => {
   describe('with showSourceLocation disabled', () => {
     let next: NextInstance
     let logs: string[] = []
-    let originalStdout: typeof process.stdout.write
-    let originalStderr: typeof process.stderr.write
+    let logCapture: ReturnType<typeof setupLogCapture>
 
     beforeAll(async () => {
-      originalStdout = process.stdout.write
-      originalStderr = process.stderr.write
-
-      const capture = (chunk: any) => {
-        logs.push(stripAnsi(chunk.toString()))
-        return true
-      }
-
-      process.stdout.write = function (chunk: any) {
-        capture(chunk)
-        return originalStdout.call(this, chunk)
-      }
-      process.stderr.write = function (chunk: any) {
-        capture(chunk)
-        return originalStderr.call(this, chunk)
-      }
+      logCapture = setupLogCapture()
+      logs = logCapture.logs
 
       next = await createNext({
         files: {
@@ -551,13 +461,12 @@ describe(`Terminal Logging (${bundlerName})`, () => {
     })
 
     afterAll(async () => {
-      process.stdout.write = originalStdout
-      process.stderr.write = originalStderr
+      logCapture.restore()
       await next.destroy()
     })
 
     beforeEach(() => {
-      logs = []
+      logCapture.clearLogs()
     })
 
     it(`should omit source location in logs when disabled (${bundlerName})`, async () => {

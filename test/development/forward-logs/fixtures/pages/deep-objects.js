@@ -9,7 +9,9 @@ export default function DeepObjectsPage() {
             level1: {
               level2: {
                 level3: {
-                  level4: 'too deep',
+                  level4: {
+                    level5: 'cut off',
+                  },
                 },
               },
             },

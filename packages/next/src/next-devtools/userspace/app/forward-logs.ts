@@ -59,9 +59,15 @@ export function safeClone<T>(value: T, seen = new WeakMap()): any {
   if (seen.has(value as object)) return seen.get(value as object)
 
   try {
-    if (typeof (value as any)?.then === 'function') return PROMISE_MARKER
+    Object.keys(value as object)
   } catch {
-    /* not an important case */
+    return UNAVAILABLE_MARKER
+  }
+
+  try {
+    if (typeof (value as any).then === 'function') return PROMISE_MARKER
+  } catch {
+    return UNAVAILABLE_MARKER
   }
 
   if (Array.isArray(value)) {
