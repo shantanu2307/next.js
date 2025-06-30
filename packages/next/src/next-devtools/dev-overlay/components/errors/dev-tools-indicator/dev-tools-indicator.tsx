@@ -154,13 +154,7 @@ function DevToolsPopover({
   // Features to make the menu accessible
   useFocusTrap(menuRef, triggerRef, isMenuOpen)
   useClickOutside(menuRef, triggerRef, isMenuOpen, closeMenu)
-
-  useShortcuts(
-    {
-      [hideShortcut || '']: hideDevTools,
-    },
-    triggerRef
-  )
+  useShortcuts(hideShortcut ? { [hideShortcut]: hideDevTools } : {}, triggerRef)
 
   useEffect(() => {
     if (open === null) {

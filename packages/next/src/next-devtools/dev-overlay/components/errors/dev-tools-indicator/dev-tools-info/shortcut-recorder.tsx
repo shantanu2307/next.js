@@ -20,8 +20,6 @@ export function ShortcutRecorder({
   const buttonRef = useRef<HTMLButtonElement>(null)
   const hasShortcut = Boolean(value) || keys.length > 0
 
-  console.log(keys)
-
   function handleKeyDown(e: React.KeyboardEvent<HTMLButtonElement>) {
     // Don't handle events from the Clear button
     if (e.target !== buttonRef.current) return
