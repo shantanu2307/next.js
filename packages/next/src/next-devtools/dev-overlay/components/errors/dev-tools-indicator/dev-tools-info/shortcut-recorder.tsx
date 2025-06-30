@@ -15,14 +15,21 @@ export function ShortcutRecorder({
 }) {
   const [show, setShow] = useState(false)
   const [keys, setKeys] = useState<string[]>(value ?? [])
-  const [success, setSuccess] = useState<boolean>(false)
+  const [success, setSuccess] = useState<boolean>(true)
   const timeoutRef = useRef<number | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const hasShortcut = Boolean(value) && keys.length > 0
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+  function handleKeyDown(e: React.KeyboardEvent<HTMLButtonElement>) {
+    // Don't handle events from the Clear button
+    if (e.target !== buttonRef.current) return
     if (e.key === 'Tab') return
     if (e.key === 'Tab' && e.shiftKey) return
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
+
+    if (!show) {
+      setShow(true)
+    }
 
     function handleValidation(next: string[]) {
       timeoutRef.current = window.setTimeout(() => {
@@ -89,9 +96,12 @@ export function ShortcutRecorder({
   }
 
   function clear() {
-    inputRef.current?.focus()
+    buttonRef.current?.focus()
     setKeys([])
     setSuccess(false)
+    setTimeout(() => {
+      setShow(true)
+    })
   }
 
   function onBlur() {
@@ -99,36 +109,51 @@ export function ShortcutRecorder({
     setShow(false)
   }
 
+  function onStart() {
+    // Clear out timeouts for hiding the tooltip after success
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    setShow(true)
+  }
+
   return (
     <div className="shortcut-recorder">
-      <div className="shortcut-recorder-input-container">
-        <input
-          ref={inputRef}
-          type="text"
-          placeholder="Record Shortcut"
-          data-has-shortcut={Boolean(value) && keys.length > 0}
-          data-pristine={keys.length === 0}
-          onFocus={() => setShow(true)}
-          onBlur={onBlur}
-          onKeyDown={handleKeyDown}
-          maxLength={3}
-        />
-        <div className="shortcut-recorder-keys">
-          {keys.map((key) => (
-            <Kbd key={key}>{key}</Kbd>
-          ))}
-        </div>
-        {keys.length > 0 && (
-          <button
+      <button
+        className="shortcut-recorder-button"
+        ref={buttonRef}
+        onClick={onStart}
+        onFocus={onStart}
+        onBlur={onBlur}
+        onKeyDown={handleKeyDown}
+        data-has-shortcut={hasShortcut}
+      >
+        {!hasShortcut ? (
+          'Record Shortcut'
+        ) : (
+          <div className="shortcut-recorder-keys">
+            {keys.map((key) => (
+              <Kbd key={key}>{key}</Kbd>
+            ))}
+          </div>
+        )}
+        {hasShortcut && (
+          <div
             className="shortcut-recorder-clear-button"
-            type="button"
+            role="button"
             onClick={clear}
+            onFocus={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                clear()
+                e.stopPropagation()
+              }
+            }}
             aria-label="Clear shortcut"
+            tabIndex={0}
           >
             <IconCross />
-          </button>
+          </div>
         )}
-      </div>
+      </button>
       <div className="shortcut-recorder-tooltip" data-show={show}>
         <div className="shortcut-recorder-status">
           <div
@@ -260,20 +285,23 @@ export const SHORTCUT_RECORDER_STYLES = css`
     justify-content: center;
     gap: 8px;
     position: relative;
+    font-family: var(--font-stack-sans);
 
-    input {
-      width: 125px;
-      background: var(--color-background-100);
+    .shortcut-recorder-button {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: white;
       border: 1px dashed var(--color-gray-500);
       border-radius: var(--rounded-lg);
+      padding: 6px 8px;
       font-weight: 400;
       font-size: var(--size-14);
       color: var(--color-gray-1000);
-      padding: 6px 8px;
       transition: border-color 150ms var(--timing-swift);
 
       &[data-has-shortcut='true'] {
-        border: 1px solid var(--color-gray-400);
+        border: 1px solid var(--color-gray-alpha-400);
 
         &:hover {
           border-color: var(--color-gray-500);
@@ -305,7 +333,6 @@ export const SHORTCUT_RECORDER_STYLES = css`
       font-family: var(--font-stack-sans);
       background: var(--color-gray-200);
       min-width: 20px;
-      font-weight: 500;
       height: 20px;
       font-size: 14px;
       border-radius: 4px;
@@ -316,11 +343,7 @@ export const SHORTCUT_RECORDER_STYLES = css`
       }
     }
 
-    button {
-      position: absolute;
-      right: 8px;
-      top: 50%;
-      transform: translateY(-50%);
+    .shortcut-recorder-clear-button {
       cursor: pointer;
       color: var(--color-gray-1000);
       width: 20px;
@@ -335,6 +358,10 @@ export const SHORTCUT_RECORDER_STYLES = css`
         background: var(--color-gray-300);
       }
 
+      &:focus-visible {
+        outline: var(--focus-ring);
+      }
+
       svg {
         width: 14px;
         height: 14px;
@@ -342,18 +369,9 @@ export const SHORTCUT_RECORDER_STYLES = css`
     }
   }
 
-  .shortcut-recorder-input-container {
-    display: grid;
-
-    > * {
-      grid-area: 1 / 1;
-    }
-  }
-
   .shortcut-recorder-keys {
     pointer-events: none;
     user-select: none;
-    margin: 6px;
     display: flex;
     align-items: center;
     gap: 2px;
@@ -365,7 +383,6 @@ export const SHORTCUT_RECORDER_STYLES = css`
     background: var(--background);
     color: var(--color-background-100);
     font-size: var(--size-14);
-    font-weight: 500;
     padding: 4px 8px;
     border-radius: 8px;
     position: absolute;
@@ -373,8 +390,8 @@ export const SHORTCUT_RECORDER_STYLES = css`
     text-align: center;
     opacity: 0;
     scale: 0.96;
+    white-space: nowrap;
     user-select: none;
-    text-wrap: pretty;
     transition:
       opacity 150ms var(--timing-swift),
       scale 150ms var(--timing-swift);
@@ -401,6 +418,7 @@ export const SHORTCUT_RECORDER_STYLES = css`
       width: 7px;
       height: 7px;
       border-radius: 50%;
+      flex-shrink: 0;
       background: var(--color-red-700);
 
       &[data-success='true'] {

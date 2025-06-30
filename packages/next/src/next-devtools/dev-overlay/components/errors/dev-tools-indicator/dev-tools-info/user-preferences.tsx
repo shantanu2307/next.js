@@ -30,7 +30,7 @@ export function UserPreferences({
   scale: DevToolsScale
   setScale: (value: DevToolsScale) => void
   hide: () => void
-  hideShortcut: string
+  hideShortcut: string | null
   setHideShortcut: (value: string) => void
 } & DevToolsInfoPropsCore &
   Omit<HTMLProps<HTMLDivElement>, 'size'>) {
@@ -183,7 +183,7 @@ export function UserPreferences({
           </div>
           <div className="preference-control">
             <ShortcutRecorder
-              value={hideShortcut?.split('+')}
+              value={hideShortcut?.split('+') ?? null}
               onChange={setHideShortcut}
             />
           </div>

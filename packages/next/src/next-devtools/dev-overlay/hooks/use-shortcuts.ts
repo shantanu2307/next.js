@@ -16,7 +16,6 @@ export function useShortcuts(
       if (e.altKey) keys.push('Alt')
       if (e.shiftKey) keys.push('Shift')
 
-      // Add the actual key pressed
       if (
         e.key !== 'Meta' &&
         e.key !== 'Control' &&
@@ -27,7 +26,6 @@ export function useShortcuts(
       }
 
       const shortcut = keys.join('+')
-      console.log(shortcut, shortcuts)
 
       if (shortcuts[shortcut]) {
         e.preventDefault()
@@ -50,7 +48,8 @@ function isFocusedOnElement(rootRef: React.RefObject<HTMLElement | null>) {
     el.contentEditable === 'true' ||
     el.tagName === 'INPUT' ||
     el.tagName === 'TEXTAREA' ||
-    el.tagName === 'SELECT'
+    el.tagName === 'SELECT' ||
+    el.tagName === 'BUTTON'
   ) {
     // It's okay to trigger global keybinds from readonly inputs
     if (el.hasAttribute('readonly')) {
