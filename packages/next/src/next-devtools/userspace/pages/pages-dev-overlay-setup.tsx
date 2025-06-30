@@ -83,7 +83,6 @@ function nextJsHandleConsoleError(...args: any[]) {
   storeHydrationErrorStateFromConsoleArgs(...args)
   // TODO: Surfaces non-errors logged via `console.error`.
   handleError(maybeError)
-  // todo(rob): should we attach hydration state to forwarded logs
   forwardErrorLog(args)
   origConsoleError.apply(window.console, args)
 }

@@ -181,35 +181,6 @@ export const logQueue: {
 
       // just incase
       try {
-        // @ts-expect-error
-        window._nextlogs = window._nextlogs ?? []
-        // @ts-expect-error
-        window._nextlogs.push([
-          'payload',
-          {
-            event: 'browser-logs',
-            entries: logQueue.entries.map((clientEntry) => {
-              switch (clientEntry.kind) {
-                case 'any-logged-error':
-                case 'console': {
-                  return {
-                    ...clientEntry,
-                    args: clientEntry.args.map(stringifyUserArg),
-                  }
-                }
-                case 'formatted-error': {
-                  return clientEntry
-                }
-                default: {
-                  return null!
-                }
-              }
-            }),
-            router: logQueue.router,
-            // needed for source mapping, we just assign the sourceType from the last error for the whole batch
-            sourceType: logQueue.sourceType,
-          },
-        ])
         const payload = JSON.stringify({
           event: 'browser-logs',
           entries: serializeEntries(logQueue.entries),
