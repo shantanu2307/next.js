@@ -121,6 +121,25 @@ const afterThisFrame = (cb: () => void) => {
 
 let isPatched = false
 
+const serializeEntries = (entries: Array<ClientLogEntry>) =>
+  entries.map((clientEntry) => {
+    switch (clientEntry.kind) {
+      case 'any-logged-error':
+      case 'console': {
+        return {
+          ...clientEntry,
+          args: clientEntry.args.map(stringifyUserArg),
+        }
+      }
+      case 'formatted-error': {
+        return clientEntry
+      }
+      default: {
+        return null!
+      }
+    }
+  })
+
 export const logQueue: {
   entries: Array<ClientLogEntry>
   onSocketReady: (socket: WebSocket) => void
@@ -156,25 +175,38 @@ export const logQueue: {
 
       // just incase
       try {
-        const payload = JSON.stringify({
-          event: 'browser-logs',
-          entries: logQueue.entries.map((clientEntry) => {
-            switch (clientEntry.kind) {
-              case 'any-logged-error':
-              case 'console': {
-                return {
-                  ...clientEntry,
-                  args: clientEntry.args.map(stringifyUserArg),
+        // @ts-expect-error
+        window._nextlogs = window._nextlogs ?? []
+        // @ts-expect-error
+        window._nextlogs.push([
+          'payload',
+          {
+            event: 'browser-logs',
+            entries: logQueue.entries.map((clientEntry) => {
+              switch (clientEntry.kind) {
+                case 'any-logged-error':
+                case 'console': {
+                  return {
+                    ...clientEntry,
+                    args: clientEntry.args.map(stringifyUserArg),
+                  }
+                }
+                case 'formatted-error': {
+                  return clientEntry
+                }
+                default: {
+                  return null!
                 }
               }
-              case 'formatted-error': {
-                return clientEntry
-              }
-              default: {
-                return null!
-              }
-            }
-          }),
+            }),
+            router: logQueue.router,
+            // needed for source mapping, we just assign the sourceType from the last error for the whole batch
+            sourceType: logQueue.sourceType,
+          },
+        ])
+        const payload = JSON.stringify({
+          event: 'browser-logs',
+          entries: serializeEntries(logQueue.entries),
           router: logQueue.router,
           // needed for source mapping, we just assign the sourceType from the last error for the whole batch
           sourceType: logQueue.sourceType,
@@ -202,7 +234,7 @@ export const logQueue: {
     try {
       const payload = JSON.stringify({
         event: 'browser-logs',
-        entries: logQueue.entries,
+        entries: serializeEntries(logQueue.entries),
         router: logQueue.router,
         sourceType: logQueue.sourceType,
       })
