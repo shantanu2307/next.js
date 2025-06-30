@@ -15,7 +15,6 @@ import { TurbopackInfo } from './dev-tools-info/turbopack-info'
 import { RouteInfo } from './dev-tools-info/route-info'
 import GearIcon from '../../../icons/gear-icon'
 import { UserPreferences } from './dev-tools-info/user-preferences'
-import { SegmentsExplorer } from '../../overview/segment-explorer'
 import {
   MENU_CURVE,
   MENU_DURATION_MS,
@@ -28,6 +27,7 @@ import {
   type DevToolsScale,
 } from './dev-tools-info/preferences'
 import { Draggable } from './draggable'
+import { SegmentsExplorer } from './dev-tools-info/segments-explorer'
 import { useShortcuts } from '../../../hooks/use-shortcuts'
 
 // TODO: add E2E tests to cover different scenarios
@@ -360,13 +360,14 @@ function DevToolsPopover({
         setHideShortcut={setHideShortcut}
       />
 
-      {/* Page Segment Explorer */}
+      {/* Page Route Info */}
       {process.env.__NEXT_DEVTOOL_SEGMENT_EXPLORER ? (
         <SegmentsExplorer
           isOpen={isSegmentExplorerOpen}
           close={closeToRootMenu}
           triggerRef={triggerRef}
           style={popover}
+          routerType={routerType}
         />
       ) : null}
 
@@ -438,7 +439,7 @@ function DevToolsPopover({
               {process.env.__NEXT_DEVTOOL_SEGMENT_EXPLORER ? (
                 <MenuItem
                   data-segment-explorer
-                  label="Segment Explorer"
+                  label="Route Info"
                   value={<ChevronRight />}
                   onClick={() => setOpen(OVERLAYS.SegmentExplorer)}
                   index={isTurbopack ? 3 : 4}

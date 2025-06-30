@@ -3,16 +3,21 @@ use std::{
     cmp::max,
     env,
     path::PathBuf,
-    sync::{Arc, LazyLock, Mutex, PoisonError, Weak},
+    sync::{
+        Arc, LazyLock, Mutex, OnceLock, PoisonError, Weak,
+        atomic::{AtomicU32, Ordering},
+    },
 };
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use tracing::Span;
+use turbo_rcstr::RcStr;
 use turbo_tasks::{
-    SessionId, TaskId,
+    FxDashMap, SessionId, TaskId,
     backend::CachedTaskType,
     panic_hooks::{PanicHookGuard, register_panic_hook},
     turbo_tasks_scope,
@@ -21,10 +26,10 @@ use turbo_tasks::{
 use crate::{
     GitVersionInfo,
     backend::{AnyOperation, TaskDataCategory},
-    backing_storage::BackingStorage,
+    backing_storage::{BackingStorage, BackingStorageSealed},
     data::CachedDataItem,
     database::{
-        db_invalidation::{check_db_invalidation_and_cleanup, invalidate_db},
+        db_invalidation::{StartupCacheState, check_db_invalidation_and_cleanup, invalidate_db},
         db_versioning::handle_db_versioning,
         key_value_database::{KeySpace, KeyValueDatabase},
         write_batch::{
@@ -32,12 +37,17 @@ use crate::{
             WriteBuffer,
         },
     },
+    db_invalidation::invalidation_reasons,
+    interning_serde,
+    interning_serde::{LocalIdToGlobalId, LocalIdToRcStr, RcStrToLocalId},
     utils::chunked_vec::ChunkedVec,
 };
 
 const POT_CONFIG: pot::Config = pot::Config::new().compatibility(pot::Compatibility::V4);
 
-fn pot_serialize_small_vec<T: Serialize>(value: &T) -> pot::Result<SmallVec<[u8; 16]>> {
+fn pot_serialize_small_vec<T: Serialize>(
+    value: &T,
+) -> Result<(SmallVec<[u8; 16]>, RcStrToLocalId)> {
     struct SmallVecWrite<'l>(&'l mut SmallVec<[u8; 16]>);
     impl std::io::Write for SmallVecWrite<'_> {
         #[inline]
@@ -59,8 +69,8 @@ fn pot_serialize_small_vec<T: Serialize>(value: &T) -> pot::Result<SmallVec<[u8;
     }
 
     let mut output = SmallVec::new();
-    POT_CONFIG.serialize_into(value, SmallVecWrite(&mut output))?;
-    Ok(output)
+    let ser_map = interning_serde::to_writer(&POT_CONFIG, value, SmallVecWrite(&mut output))?;
+    Ok((output, ser_map))
 }
 
 fn pot_ser_symbol_map() -> pot::ser::SymbolMap {
@@ -74,6 +84,7 @@ fn pot_de_symbol_list<'l>() -> pot::de::SymbolList<'l> {
 const META_KEY_OPERATIONS: u32 = 0;
 const META_KEY_NEXT_FREE_TASK_ID: u32 = 1;
 const META_KEY_SESSION_ID: u32 = 2;
+const META_KEY_NEXT_STRING_ID: u32 = 3;
 
 struct IntKey([u8; 4]);
 
@@ -120,15 +131,21 @@ pub struct KeyValueDatabaseBackingStorageInner<T: KeyValueDatabase> {
     base_path: Option<PathBuf>,
     /// Used to skip calling [`invalidate_db`] when the database has already been invalidated.
     invalidated: Mutex<bool>,
+    /// We configure a panic hook to invalidate the cache. This guard cleans up our panic hook upon
+    /// drop.
     _panic_hook_guard: Option<PanicHookGuard>,
 }
 
 pub struct KeyValueDatabaseBackingStorage<T: KeyValueDatabase> {
+    // wrapped so that `register_panic_hook` can hold a weak reference to `inner`.
     inner: Arc<KeyValueDatabaseBackingStorageInner<T>>,
 }
 
+/// A wrapper type used by [`crate::turbo_backing_storage`] and [`crate::noop_backing_storage`].
+///
+/// Wraps a low-level key-value database into a higher-level [`BackingStorage`] type.
 impl<T: KeyValueDatabase> KeyValueDatabaseBackingStorage<T> {
-    pub fn new_in_memory(database: T) -> Self {
+    pub(crate) fn new_in_memory(database: T) -> Self {
         Self {
             inner: Arc::new(KeyValueDatabaseBackingStorageInner {
                 database,
@@ -139,19 +156,30 @@ impl<T: KeyValueDatabase> KeyValueDatabaseBackingStorage<T> {
         }
     }
 
-    pub fn open_versioned_on_disk(
+    /// Handles boilerplate logic for an on-disk persisted database with versioning.
+    ///
+    /// - Creates a directory per version, with a maximum number of old versions and performs
+    ///   automatic cleanup of old versions.
+    /// - Checks for a database invalidation marker file, and cleans up the database as needed.
+    /// - [Registers a dynamic panic hook][turbo_tasks::panic_hooks] to invalidate the database upon
+    ///   a panic. This invalidates the database using [`invalidation_reasons::PANIC`].
+    ///
+    /// Along with returning a [`KeyValueDatabaseBackingStorage`], this returns a
+    /// [`StartupCacheState`], which can be used by the application for logging information to the
+    /// user or telemetry about the cache.
+    pub(crate) fn open_versioned_on_disk(
         base_path: PathBuf,
         version_info: &GitVersionInfo,
         is_ci: bool,
         database: impl FnOnce(PathBuf) -> Result<T>,
-    ) -> Result<Self>
+    ) -> Result<(Self, StartupCacheState)>
     where
         T: Send + Sync + 'static,
     {
-        check_db_invalidation_and_cleanup(&base_path)?;
+        let startup_cache_state = check_db_invalidation_and_cleanup(&base_path)?;
         let versioned_path = handle_db_versioning(&base_path, version_info, is_ci)?;
         let database = (database)(versioned_path)?;
-        Ok(Self {
+        let backing_storage = Self {
             inner: Arc::new_cyclic(
                 move |weak_inner: &Weak<KeyValueDatabaseBackingStorageInner<T>>| {
                     let panic_hook_guard = if should_invalidate_on_panic() {
@@ -164,7 +192,7 @@ impl<T: KeyValueDatabase> KeyValueDatabaseBackingStorage<T> {
                             // or turbo-tasks failed, and it may be hard to recover. We don't want
                             // the cache to stick around, as that may persist bugs. Make a
                             // best-effort attempt to invalidate the database (ignoring failures).
-                            let _ = inner.invalidate();
+                            let _ = inner.invalidate(invalidation_reasons::PANIC);
                         })))
                     } else {
                         None
@@ -177,7 +205,8 @@ impl<T: KeyValueDatabase> KeyValueDatabaseBackingStorage<T> {
                     }
                 },
             ),
-        })
+        };
+        Ok((backing_storage, startup_cache_state))
     }
 }
 
@@ -197,7 +226,7 @@ impl<T: KeyValueDatabase> KeyValueDatabaseBackingStorageInner<T> {
         }
     }
 
-    fn invalidate(&self) -> Result<()> {
+    fn invalidate(&self, reason_code: &str) -> Result<()> {
         // `base_path` can be `None` for a `NoopKvDb`
         if let Some(base_path) = &self.base_path {
             // Invalidation could happen frequently if there's a bunch of panics. We only need to
@@ -212,7 +241,7 @@ impl<T: KeyValueDatabase> KeyValueDatabaseBackingStorageInner<T> {
             // Invalidate first, as it's a very fast atomic operation. `prevent_writes` is allowed
             // to be slower (e.g. wait for a lock) and is allowed to corrupt the database with
             // partial writes.
-            invalidate_db(base_path)?;
+            invalidate_db(base_path, reason_code)?;
             self.database.prevent_writes();
             // Avoid redundant invalidations from future panics
             *invalidated_guard = true;
@@ -231,6 +260,14 @@ impl<T: KeyValueDatabase> KeyValueDatabaseBackingStorageInner<T> {
 }
 
 impl<T: KeyValueDatabase + Send + Sync + 'static> BackingStorage
+    for KeyValueDatabaseBackingStorage<T>
+{
+    fn invalidate(&self, reason_code: &str) -> Result<()> {
+        self.inner.invalidate(reason_code)
+    }
+}
+
+impl<T: KeyValueDatabase + Send + Sync + 'static> BackingStorageSealed
     for KeyValueDatabaseBackingStorage<T>
 {
     type ReadTransaction<'l> = T::ReadTransaction<'l>;
@@ -271,13 +308,16 @@ impl<T: KeyValueDatabase + Send + Sync + 'static> BackingStorage
             else {
                 return Ok(Vec::new());
             };
-            let operations = deserialize_with_good_error(operations.borrow())?;
+            let operations = deserialize_with_good_error(database, &tx, operations.borrow())?;
             Ok(operations)
         }
         get(&self.inner.database).context("Unable to read uncompleted operations from database")
     }
 
-    fn serialize(task: TaskId, data: &Vec<CachedDataItem>) -> Result<SmallVec<[u8; 16]>> {
+    fn serialize(
+        task: TaskId,
+        data: &Vec<CachedDataItem>,
+    ) -> Result<(SmallVec<[u8; 16]>, RcStrToLocalId)> {
         serialize(task, data)
     }
 
@@ -292,8 +332,8 @@ impl<T: KeyValueDatabase + Send + Sync + 'static> BackingStorage
         I: Iterator<
                 Item = (
                     TaskId,
-                    Option<SmallVec<[u8; 16]>>,
-                    Option<SmallVec<[u8; 16]>>,
+                    Option<(SmallVec<[u8; 16]>, RcStrToLocalId)>,
+                    Option<(SmallVec<[u8; 16]>, RcStrToLocalId)>,
                 ),
             > + Send
             + Sync,
@@ -339,7 +379,11 @@ impl<T: KeyValueDatabase + Send + Sync + 'static> BackingStorage
                             let mut task_type_bytes = Vec::new();
                             for (task_type, task_id) in updates {
                                 let task_id: u32 = *task_id;
-                                serialize_task_type(&task_type, &mut task_type_bytes, task_id)?;
+                                let rcstr_map =
+                                    serialize_task_type(&task_type, &mut task_type_bytes, task_id)?;
+
+                                let global_ids = save_strings_concurrent(batch, &rcstr_map)?;
+                                global_ids.write_to(&mut task_type_bytes)?;
 
                                 batch
                                     .put(
@@ -409,7 +453,11 @@ impl<T: KeyValueDatabase + Send + Sync + 'static> BackingStorage
                         let mut task_type_bytes = Vec::new();
                         for (task_type, task_id) in task_cache_updates.into_iter().flatten() {
                             let task_id = *task_id;
-                            serialize_task_type(&task_type, &mut task_type_bytes, task_id)?;
+                            let rcstr_map =
+                                serialize_task_type(&task_type, &mut task_type_bytes, task_id)?;
+
+                            let global_ids = save_strings_serial(batch, &rcstr_map)?;
+                            global_ids.write_to(&mut task_type_bytes)?;
 
                             batch
                                 .put(
@@ -447,16 +495,30 @@ impl<T: KeyValueDatabase + Send + Sync + 'static> BackingStorage
                     for (task_id, meta, data) in task_items_result?.into_iter().flatten() {
                         let key = IntKey::new(*task_id);
                         let key = key.as_ref();
-                        if let Some(meta) = meta {
+                        if let Some((mut meta, rcstr_map)) = meta {
+                            let global_ids = save_strings_serial(batch, &rcstr_map)?;
+                            global_ids.write_to(&mut meta)?;
+
                             batch
-                                .put(KeySpace::TaskMeta, WriteBuffer::Borrowed(key), meta)
+                                .put(
+                                    KeySpace::TaskMeta,
+                                    WriteBuffer::Borrowed(key),
+                                    WriteBuffer::SmallVec(meta),
+                                )
                                 .with_context(|| {
                                     anyhow!("Unable to write meta items for {task_id}")
                                 })?;
                         }
-                        if let Some(data) = data {
+                        if let Some((mut data, rcstr_map)) = data {
+                            let global_ids = save_strings_serial(batch, &rcstr_map)?;
+                            global_ids.write_to(&mut data)?;
+
                             batch
-                                .put(KeySpace::TaskData, WriteBuffer::Borrowed(key), data)
+                                .put(
+                                    KeySpace::TaskData,
+                                    WriteBuffer::Borrowed(key),
+                                    WriteBuffer::SmallVec(data),
+                                )
                                 .with_context(|| {
                                     anyhow!("Unable to write data items for {task_id}")
                                 })?;
@@ -483,21 +545,22 @@ impl<T: KeyValueDatabase + Send + Sync + 'static> BackingStorage
         &self,
         tx: Option<&T::ReadTransaction<'_>>,
         task_type: &CachedTaskType,
-    ) -> Result<Option<TaskId>> {
-        let inner = &*self.inner;
+    ) -> Result<Option<(TaskId, RcStrToLocalId)>> {
         fn lookup<D: KeyValueDatabase>(
             database: &D,
             tx: &D::ReadTransaction<'_>,
             task_type: &CachedTaskType,
-        ) -> Result<Option<TaskId>> {
-            let task_type = POT_CONFIG.serialize(task_type)?;
+        ) -> Result<Option<(TaskId, RcStrToLocalId)>> {
+            let (task_type, map) = interning_serde::to_vec(&POT_CONFIG, task_type)?;
             let Some(bytes) = database.get(tx, KeySpace::ForwardTaskCache, &task_type)? else {
                 return Ok(None);
             };
             let bytes = bytes.borrow().try_into()?;
             let id = TaskId::try_from(u32::from_le_bytes(bytes)).unwrap();
-            Ok(Some(id))
+            Ok(Some((id, map)))
         }
+
+        let inner = &*self.inner;
         if inner.database.is_empty() {
             // Checking if the database is empty is a performance optimization
             // to avoid serializing the task type.
@@ -527,7 +590,11 @@ impl<T: KeyValueDatabase + Send + Sync + 'static> BackingStorage
             else {
                 return Ok(None);
             };
-            Ok(Some(deserialize_with_good_error(bytes.borrow())?))
+            Ok(Some(deserialize_with_good_error(
+                database,
+                tx,
+                bytes.borrow(),
+            )?))
         }
         inner
             .with_tx(tx, |tx| lookup(&inner.database, tx, task_id))
@@ -559,7 +626,8 @@ impl<T: KeyValueDatabase + Send + Sync + 'static> BackingStorage
             else {
                 return Ok(Vec::new());
             };
-            let result: Vec<CachedDataItem> = deserialize_with_good_error(bytes.borrow())?;
+            let result: Vec<CachedDataItem> =
+                deserialize_with_good_error(database, tx, bytes.borrow())?;
             Ok(result)
         }
         inner
@@ -567,13 +635,58 @@ impl<T: KeyValueDatabase + Send + Sync + 'static> BackingStorage
             .with_context(|| format!("Looking up data for {task_id} from database failed"))
     }
 
-    fn invalidate(&self) -> Result<()> {
-        self.inner.invalidate()
-    }
-
     fn shutdown(&self) -> Result<()> {
         self.inner.database.shutdown()
     }
+}
+
+fn restore_strings<D: KeyValueDatabase>(
+    database: &D,
+    tx: &D::ReadTransaction<'_>,
+    global_ids: &LocalIdToGlobalId,
+) -> Result<LocalIdToRcStr> {
+    let mut map = Vec::with_capacity(global_ids.len());
+
+    for global_id in global_ids.iter() {
+        // First, check the in-memory cache
+        let rcstr = {
+            let cache = STRING_CACHE.lock().unwrap_or_else(PoisonError::into_inner);
+            cache.get(&global_id).cloned()
+        };
+
+        let rcstr = if let Some(rcstr) = rcstr {
+            // Cache hit
+            rcstr
+        } else {
+            // Cache miss, fetch from database
+            let Some(value) = database.get(
+                tx,
+                KeySpace::ReverseStringInternMap,
+                IntKey::new(global_id).as_ref(),
+            )?
+            else {
+                bail!("Unable to find string for {global_id}")
+            };
+
+            let mut rcstr = unsafe {
+                // Safety: We interned a rust string, so it is valid utf-8
+                RcStr::from(str::from_utf8_unchecked(value.borrow()))
+            };
+
+            // Update both caches
+            {
+                let mut cache = STRING_CACHE.lock().unwrap_or_else(PoisonError::into_inner);
+                rcstr = cache.entry(global_id).or_insert(rcstr).clone();
+            }
+            STRING_TO_ID_CACHE.insert(rcstr.clone(), global_id);
+
+            rcstr
+        };
+
+        map.push(rcstr);
+    }
+
+    Ok(map.into())
 }
 
 fn get_next_free_task_id<'a, S, C>(
@@ -626,8 +739,15 @@ where
     {
         let _span =
             tracing::trace_span!("update operations", operations = operations.len()).entered();
-        let operations = pot_serialize_small_vec(&operations)
+        let (mut operations, rcstr_map) = pot_serialize_small_vec(&operations)
             .with_context(|| anyhow!("Unable to serialize operations"))?;
+        let global_ids = match batch {
+            WriteBatchRef::Serial(_) => save_strings_serial(batch, &rcstr_map)?,
+            WriteBatchRef::Concurrent(batch, _) => save_strings_concurrent(&**batch, &rcstr_map)?,
+        };
+        // Prepend the global ids to the operations
+        global_ids.write_to(&mut operations)?;
+
         batch
             .put(
                 KeySpace::Infra,
@@ -636,7 +756,23 @@ where
             )
             .with_context(|| anyhow!("Unable to write operations"))?;
     }
+
+    if let Some(next_string_id) = STRING_INTERN_ID.get() {
+        let _span = tracing::trace_span!("update next string id").entered();
+
+        let next_string_id = next_string_id.load(Ordering::SeqCst);
+
+        batch
+            .put(
+                KeySpace::Infra,
+                WriteBuffer::Borrowed(IntKey::new(META_KEY_NEXT_STRING_ID).as_ref()),
+                WriteBuffer::Borrowed(&next_string_id.to_le_bytes()),
+            )
+            .with_context(|| anyhow!("Unable to write next string id"))?;
+    }
+
     batch.flush(KeySpace::Infra)?;
+
     Ok(())
 }
 
@@ -644,10 +780,9 @@ fn serialize_task_type(
     task_type: &Arc<CachedTaskType>,
     mut task_type_bytes: &mut Vec<u8>,
     task_id: u32,
-) -> Result<()> {
+) -> Result<RcStrToLocalId> {
     task_type_bytes.clear();
-    POT_CONFIG
-        .serialize_into(&**task_type, &mut task_type_bytes)
+    let result = interning_serde::to_writer(&POT_CONFIG, task_type, &mut task_type_bytes)
         .with_context(|| anyhow!("Unable to serialize task {task_id} cache key {task_type:?}"))?;
     #[cfg(feature = "verify_serialization")]
     {
@@ -659,14 +794,14 @@ fn serialize_task_type(
             panic!("Task type would not be deserializable {task_id}: {err:?}");
         }
     }
-    Ok(())
+    Ok(result)
 }
 
 type SerializedTasks = Vec<
     Vec<(
         TaskId,
-        Option<WriteBuffer<'static>>,
-        Option<WriteBuffer<'static>>,
+        Option<(SmallVec<[u8; 16]>, RcStrToLocalId)>,
+        Option<(SmallVec<[u8; 16]>, RcStrToLocalId)>,
     )>,
 >;
 
@@ -678,8 +813,8 @@ where
     I: Iterator<
             Item = (
                 TaskId,
-                Option<SmallVec<[u8; 16]>>,
-                Option<SmallVec<[u8; 16]>>,
+                Option<(SmallVec<[u8; 16]>, RcStrToLocalId)>,
+                Option<(SmallVec<[u8; 16]>, RcStrToLocalId)>,
             ),
         > + Send
         + Sync,
@@ -698,14 +833,20 @@ where
                     if let Some(batch) = batch {
                         let key = IntKey::new(*task_id);
                         let key = key.as_ref();
-                        if let Some(meta) = meta {
+                        if let Some((mut meta, rcstr_map)) = meta {
+                            let global_ids = save_strings_concurrent(batch, &rcstr_map)?;
+                            global_ids.write_to(&mut meta)?;
+
                             batch.put(
                                 KeySpace::TaskMeta,
                                 WriteBuffer::Borrowed(key),
                                 WriteBuffer::SmallVec(meta),
                             )?;
                         }
-                        if let Some(data) = data {
+                        if let Some((mut data, rcstr_map)) = data {
+                            let global_ids = save_strings_concurrent(batch, &rcstr_map)?;
+                            global_ids.write_to(&mut data)?;
+
                             batch.put(
                                 KeySpace::TaskData,
                                 WriteBuffer::Borrowed(key),
@@ -714,11 +855,7 @@ where
                         }
                     } else {
                         // Store the new task data
-                        result.push((
-                            task_id,
-                            meta.map(WriteBuffer::SmallVec),
-                            data.map(WriteBuffer::SmallVec),
-                        ));
+                        result.push((task_id, meta, data));
                     }
                 }
 
@@ -728,7 +865,10 @@ where
         .collect::<Result<Vec<_>>>()
 }
 
-fn serialize(task: TaskId, data: &Vec<CachedDataItem>) -> Result<SmallVec<[u8; 16]>> {
+fn serialize(
+    task: TaskId,
+    data: &Vec<CachedDataItem>,
+) -> Result<(SmallVec<[u8; 16]>, RcStrToLocalId)> {
     Ok(match pot_serialize_small_vec(data) {
         #[cfg(not(feature = "verify_serialization"))]
         Ok(value) => value,
@@ -774,14 +914,128 @@ fn serialize(task: TaskId, data: &Vec<CachedDataItem>) -> Result<SmallVec<[u8; 1
     })
 }
 
-fn deserialize_with_good_error<'de, T: Deserialize<'de>>(data: &'de [u8]) -> Result<T> {
-    match POT_CONFIG.deserialize(data) {
+fn deserialize_with_good_error<'de, D: KeyValueDatabase, T: Deserialize<'de>>(
+    database: &D,
+    tx: &D::ReadTransaction<'_>,
+    data: &'de [u8],
+) -> Result<T> {
+    let (global_ids, data) = LocalIdToGlobalId::read_from_slice(data)?;
+    let map = restore_strings(database, tx, &global_ids)?;
+
+    match interning_serde::from_slice::<T>(&POT_CONFIG, data, &map) {
         Ok(value) => Ok(value),
         Err(error) => serde_path_to_error::deserialize::<'_, _, T>(
             &mut pot_de_symbol_list().deserializer_for_slice(data)?,
         )
         .map_err(anyhow::Error::from)
-        .and(Err(error.into()))
+        .and(Err(error))
         .context("Deserialization failed"),
     }
+}
+
+/// Store the strings in the database and return the global ids.
+fn save_strings_serial<'a>(
+    batch: &mut impl SerialWriteBatch<'a>,
+    strings: &RcStrToLocalId,
+) -> Result<LocalIdToGlobalId> {
+    let mut global_ids = Vec::new();
+    for s in strings.iter() {
+        let (global_id, is_new) = get_string_id(batch, s)?;
+        if is_new {
+            batch.put(
+                KeySpace::StringInternMap,
+                WriteBuffer::Borrowed(s.as_bytes()),
+                WriteBuffer::Borrowed(&global_id.to_le_bytes()),
+            )?;
+            batch.put(
+                KeySpace::ReverseStringInternMap,
+                WriteBuffer::Borrowed(IntKey::new(global_id).as_ref()),
+                WriteBuffer::Borrowed(s.as_bytes()),
+            )?;
+        }
+
+        global_ids.push(global_id);
+    }
+
+    Ok(LocalIdToGlobalId::from(global_ids))
+}
+/// Store the strings in the database and return the global ids.
+fn save_strings_concurrent<'a>(
+    batch: &impl ConcurrentWriteBatch<'a>,
+    strings: &RcStrToLocalId,
+) -> Result<LocalIdToGlobalId> {
+    let mut global_ids = Vec::new();
+    for s in strings.iter() {
+        let (global_id, is_new) = get_string_id(batch, s)?;
+        if is_new {
+            batch.put(
+                KeySpace::StringInternMap,
+                WriteBuffer::Borrowed(s.as_bytes()),
+                WriteBuffer::Borrowed(&global_id.to_le_bytes()),
+            )?;
+            batch.put(
+                KeySpace::ReverseStringInternMap,
+                WriteBuffer::Borrowed(IntKey::new(global_id).as_ref()),
+                WriteBuffer::Borrowed(s.as_bytes()),
+            )?;
+        }
+
+        global_ids.push(global_id);
+    }
+
+    Ok(LocalIdToGlobalId::from(global_ids))
+}
+
+static STRING_INTERN_ID: OnceLock<AtomicU32> = OnceLock::new();
+static STRING_CACHE: LazyLock<Mutex<FxHashMap<u32, RcStr>>> =
+    LazyLock::new(|| Mutex::new(FxHashMap::default()));
+static STRING_TO_ID_CACHE: LazyLock<FxDashMap<RcStr, u32>> = LazyLock::new(FxDashMap::default);
+
+/// Returns `(global_id, is_new)`
+fn get_string_id<'a>(batch: &impl BaseWriteBatch<'a>, s: &RcStr) -> Result<(u32, bool)> {
+    // First check the synchronization cache
+    if let Some(global_id) = STRING_TO_ID_CACHE.get(s) {
+        return Ok((*global_id, false));
+    }
+
+    // Check the database
+    let original = batch.get(KeySpace::StringInternMap, s.as_bytes())?;
+
+    if let Some(bytes) = original {
+        let global_id = as_u32(bytes)?;
+        // Cache the result for future lookups
+        STRING_TO_ID_CACHE.insert(s.clone(), global_id);
+        STRING_CACHE.lock().unwrap().insert(global_id, s.clone());
+        return Ok((global_id, false));
+    }
+
+    // Allocate a new ID
+    let global_id = STRING_INTERN_ID
+        .get_or_try_init(|| {
+            let Some(bytes) = batch.get(
+                KeySpace::Infra,
+                IntKey::new(META_KEY_NEXT_STRING_ID).as_ref(),
+            )?
+            else {
+                return anyhow::Ok(AtomicU32::new(0));
+            };
+
+            let latest_id = as_u32(bytes)?;
+
+            Ok(AtomicU32::new(latest_id))
+        })?
+        .fetch_add(1, Ordering::Relaxed);
+
+    // Cache the new assignment to prevent duplicates within the same batch
+    match STRING_TO_ID_CACHE.entry(s.clone()) {
+        dashmap::Entry::Occupied(occupied_entry) => {
+            return Ok((*occupied_entry.get(), false));
+        }
+        dashmap::Entry::Vacant(vacant_entry) => {
+            vacant_entry.insert(global_id);
+        }
+    }
+    STRING_CACHE.lock().unwrap().insert(global_id, s.clone());
+
+    Ok((global_id, true))
 }

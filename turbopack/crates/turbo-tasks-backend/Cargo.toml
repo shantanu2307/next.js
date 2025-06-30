@@ -39,10 +39,13 @@ parking_lot = { workspace = true }
 pot = "3.0.0"
 rand = { workspace = true }
 rayon = { workspace = true }
+ringmap = { workspace = true, features = ["serde"] }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_json = { workspace = true }
 serde_path_to_error = { workspace = true }
-smallvec = { workspace = true }
+smallvec = { workspace = true, features = ["write"] }
 tokio = { workspace = true }
 tracing = { workspace = true }
 thread_local = { workspace = true }
@@ -54,7 +57,6 @@ turbo-tasks-testing = { workspace = true }
 [dev-dependencies]
 criterion = { workspace = true, features = ["async_tokio"] }
 regex = { workspace = true }
-serde_json = { workspace = true }
 tempfile = { workspace = true }
 rstest = { workspace = true }
 
