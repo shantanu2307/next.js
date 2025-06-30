@@ -100,7 +100,7 @@ export function getRender({
         serverActionsManifest,
         serverActions,
         nextFontManifest,
-        devtoolNewPanelUI: config.experimental.devtoolNewPanelUI,
+        devtoolNewPanelUi: config.experimental.devtoolNewPanelUi,
       },
       renderToHTML,
       incrementalCacheHandler,

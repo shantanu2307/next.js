@@ -280,9 +280,9 @@ export interface RenderOptsPartial {
   allowEmptyStaticShell?: boolean
 
   /**
-   * next config experimental.devtoolNewPanelUI
+   * next config experimental.devtoolNewPanelUi
    */
-  devtoolNewPanelUI?: boolean
+  devtoolNewPanelUi?: boolean
 }
 
 export type RenderOpts = LoadComponentsReturnType<AppPageModule> &
