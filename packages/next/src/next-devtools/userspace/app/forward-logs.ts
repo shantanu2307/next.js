@@ -173,6 +173,7 @@ export const logQueue: {
       return
     }
 
+    // we probably dont need this
     logQueue.flushScheduled = true
 
     // non blocking log flush, runs at most once per frame
@@ -193,6 +194,7 @@ export const logQueue: {
         logQueue.entries = []
         logQueue.sourceType = undefined
       } catch {
+        // error (make sure u don't infinite loop)
         /* noop */
       }
     })
@@ -253,9 +255,10 @@ const createErrorArg = (error: Error) => {
 
 const createLogEntry = (level: LogMethod, args: any[]) => {
   // do not abstract this, it implicitly relies on which functions call it. forcing the inlined implementation makes you think about callers
+  // error capture stack trace maybe
   const stack = stackWithOwners(new Error())
   const stackLines = stack?.split('\n')
-  const cleanStack = stackLines?.slice(3).join('\n')
+  const cleanStack = stackLines?.slice(3).join('\n') // this is probably ignored anyways
   const entry: ConsoleEntry<unknown> = {
     kind: 'console',
     consoleMethodStack: cleanStack ?? null, // depending on browser we might not have stack
@@ -397,6 +400,8 @@ const isHMR = (args: any[]) => {
 
   return false
 }
+
+// server source maps test ts
 const isServerLog = (args: any[]) => {
   if (args.length < 3) {
     return false
@@ -437,6 +442,7 @@ export const initializeDebugLogForwarding = (router: 'app' | 'pages'): void => {
         if (isHMR(args)) {
           return
         }
+        // handle other badges
         if (isServerLog(args)) {
           return
         }

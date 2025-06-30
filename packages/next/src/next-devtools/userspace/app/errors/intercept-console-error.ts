@@ -39,7 +39,6 @@ export function patchConsoleError() {
       }
 
       forwardErrorLog(args)
-
       originConsoleError.apply(window.console, args)
     }
   }

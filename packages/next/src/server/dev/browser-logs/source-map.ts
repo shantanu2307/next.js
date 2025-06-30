@@ -29,6 +29,7 @@ type TurbopackMappingContext = {
 
 export type MappingContext = WebpackMappingContext | TurbopackMappingContext
 
+// TODO: handle server vs browser error source mapping correctly
 export async function mapFramesUsingBundler(
   frames: StackFrame[],
   ctx: MappingContext
@@ -216,6 +217,7 @@ async function getSourceMappedStackFramesInternal(
   }
 }
 
+// todo: cache the actual async call, not the wrapper with post processing
 export async function getSourceMappedStackFrames(
   stackTrace: string,
   ctx: MappingContext,

@@ -415,9 +415,11 @@ export async function handleLog(
         case 'console': {
           switch (entry.method) {
             case 'table': {
+              // timeout based abort on source mapping result
               await handleTable(entry, browserPrefix, ctx, distDir)
               break
             }
+            // ignore frames
             case 'trace': {
               await handleTrace(entry, browserPrefix, ctx, distDir)
               break
@@ -426,6 +428,10 @@ export async function handleLog(
               await handleDir(entry, browserPrefix, ctx, distDir)
               break
             }
+            // xml log thing maybe needs an impl
+
+            // [browser] undefined (app/page.tsx:8:11) console.group
+            // check console assert
             default: {
               await handleDefaultConsole(
                 entry,
