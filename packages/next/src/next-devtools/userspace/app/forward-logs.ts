@@ -191,8 +191,6 @@ export const logQueue: {
 
         socket.send(payload)
         logQueue.entries = []
-
-        // Reset after a successful flush so each batch reflects only the
         logQueue.sourceType = undefined
       } catch {
         /* noop */
