@@ -24,7 +24,6 @@ export function ShortcutRecorder({
     // Don't handle events from the Clear button
     if (e.target !== buttonRef.current) return
     if (e.key === 'Tab') return
-    if (e.key === 'Tab' && e.shiftKey) return
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
 
     if (!show) {
