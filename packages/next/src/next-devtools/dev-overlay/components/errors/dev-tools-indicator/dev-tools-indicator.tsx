@@ -126,6 +126,7 @@ function DevToolsPopover({
   scale: DevToolsScale
   setScale: (value: DevToolsScale) => void
 }) {
+  const rootRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
 
@@ -173,7 +174,13 @@ function DevToolsPopover({
 
   function hideDevTools() {
     toggleVisibility()
-    setOpen(null)
+    const root = rootRef.current
+    // Toggle custom hidden attribute, no need
+    // to close the menu in case you want to quickly get it
+    // out the way to see an element behind it.
+    if (root) {
+      root.dataset.hidden = root.dataset.hidden === 'true' ? 'false' : 'true'
+    }
   }
 
   function select(index: number | 'first' | 'last') {
@@ -285,6 +292,7 @@ function DevToolsPopover({
 
   return (
     <Toast
+      ref={rootRef}
       data-nextjs-toast
       style={
         {
@@ -543,6 +551,12 @@ function IssueCount({ children }: { children: number }) {
 //////////////////////////////////////////////////////////////////////////////////////
 
 export const DEV_TOOLS_INDICATOR_STYLES = `
+  [data-nextjs-toast] {
+    &[data-hidden='true'] {
+      display: none;
+    }
+  }
+
   .dev-tools-indicator-menu {
     -webkit-font-smoothing: antialiased;
     display: flex;
