@@ -1351,7 +1351,7 @@ export const defaultConfig = {
       static: process.env.NEXT_STATIC_CACHE_HANDLER_PATH,
     },
     cssChunking: true,
-    devtoolNewPanelUi: process.env.__NEXT_DEVTOOL_NEW_PANEL_UI === 'true',
+    devtoolNewPanelUi: true,
     multiZoneDraftMode: false,
     appNavFailHandling: false,
     prerenderEarlyExit: true,
