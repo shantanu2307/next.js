@@ -49,7 +49,7 @@ function isFocusedOnElement(rootRef: React.RefObject<HTMLElement | null>) {
     el.tagName === 'INPUT' ||
     el.tagName === 'TEXTAREA' ||
     el.tagName === 'SELECT' ||
-    el.tagName === 'BUTTON'
+    el.dataset['shortcut-recorder'] === 'true'
   ) {
     // It's okay to trigger global keybinds from readonly inputs
     if (el.hasAttribute('readonly')) {

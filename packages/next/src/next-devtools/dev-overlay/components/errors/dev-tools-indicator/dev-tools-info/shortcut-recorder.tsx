@@ -128,6 +128,7 @@ export function ShortcutRecorder({
         onBlur={onBlur}
         onKeyDown={handleKeyDown}
         data-has-shortcut={hasShortcut}
+        data-shortcut-recorder="true"
       >
         {!hasShortcut ? (
           'Record Shortcut'
