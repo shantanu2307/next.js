@@ -962,6 +962,18 @@ export async function openDevToolsIndicatorPopover(
   }
 }
 
+export async function hasDevToolsPanel(browser: Playwright) {
+  const result = await browser.eval(() => {
+    const portal = [].slice
+      .call(document.querySelectorAll('nextjs-portal'))
+      .find((p) => p.shadowRoot.querySelector('[data-nextjs-dialog-overlay]'))
+
+    const root = portal?.shadowRoot
+    return root?.querySelector('[data-nextjs-dialog-overlay]') != null
+  })
+  return result
+}
+
 export async function assertHasDevToolsIndicator(browser: Playwright) {
   const devToolsIndicator = browser.locateDevToolsIndicator()
   try {
