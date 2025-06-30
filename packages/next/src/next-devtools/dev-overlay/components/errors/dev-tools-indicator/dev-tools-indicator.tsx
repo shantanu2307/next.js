@@ -130,7 +130,7 @@ function DevToolsPopover({
   const menuRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
 
-  const [open, setOpen] = useState<Overlays | null>(OVERLAYS.Preferences)
+  const [open, setOpen] = useState<Overlays | null>(null)
   const [position, setPosition] = useState(getInitialPosition())
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const [hideShortcut, setHideShortcut] = useHideShortcutStorage()

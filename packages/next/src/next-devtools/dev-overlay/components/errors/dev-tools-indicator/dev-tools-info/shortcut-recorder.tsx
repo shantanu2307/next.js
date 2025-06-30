@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { css } from '../../../../utils/css'
 
-const ERROR_DELAY_MS = 180
-const SUCCESS_DELAY_MS = 1000
+const SUCCESS_SHOW_DELAY_MS = 180
+const SUCCESS_FADE_DELAY_MS = 1000
 
 const modifierKeys = ['Meta', 'Control', 'Ctrl', 'Alt', 'Option', 'Shift']
 
@@ -11,14 +11,16 @@ export function ShortcutRecorder({
   onChange,
 }: {
   value: string[] | null
-  onChange: (value: string) => void
+  onChange: (value: string | null) => void
 }) {
   const [show, setShow] = useState(false)
   const [keys, setKeys] = useState<string[]>(value ?? [])
-  const [success, setSuccess] = useState<boolean>(true)
+  const [success, setSuccess] = useState<boolean>(false)
   const timeoutRef = useRef<number | null>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const hasShortcut = Boolean(value) && keys.length > 0
+  const hasShortcut = Boolean(value) || keys.length > 0
+
+  console.log(keys)
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLButtonElement>) {
     // Don't handle events from the Clear button
@@ -37,13 +39,14 @@ export function ShortcutRecorder({
         onChange(next.join('+'))
         timeoutRef.current = window.setTimeout(() => {
           setShow(false)
-        }, SUCCESS_DELAY_MS)
-      }, ERROR_DELAY_MS)
+        }, SUCCESS_FADE_DELAY_MS)
+      }, SUCCESS_SHOW_DELAY_MS)
     }
 
     if (keys.length === 3) return
 
     e.preventDefault()
+    e.stopPropagation()
 
     setKeys((prev) => {
       // Don't add duplicate keys
@@ -102,6 +105,7 @@ export function ShortcutRecorder({
     setTimeout(() => {
       setShow(true)
     })
+    onChange(null)
   }
 
   function onBlur() {
@@ -113,6 +117,7 @@ export function ShortcutRecorder({
     // Clear out timeouts for hiding the tooltip after success
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
     setShow(true)
+    buttonRef.current?.focus()
   }
 
   return (

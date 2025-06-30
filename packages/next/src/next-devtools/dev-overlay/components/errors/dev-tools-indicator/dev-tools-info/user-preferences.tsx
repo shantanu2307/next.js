@@ -31,7 +31,7 @@ export function UserPreferences({
   setScale: (value: DevToolsScale) => void
   hide: () => void
   hideShortcut: string | null
-  setHideShortcut: (value: string) => void
+  setHideShortcut: (value: string | null) => void
 } & DevToolsInfoPropsCore &
   Omit<HTMLProps<HTMLDivElement>, 'size'>) {
   // derive initial theme from system preference

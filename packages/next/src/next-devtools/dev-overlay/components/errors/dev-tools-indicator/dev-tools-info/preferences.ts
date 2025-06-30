@@ -85,15 +85,19 @@ export function getInitialHideShortcut(): string | null {
 
 export function useHideShortcutStorage(): [
   string | null,
-  (value: string) => void,
+  (value: string | null) => void,
 ] {
   const [hideShortcut, setHideShortcut] = useState<string | null>(
     getInitialHideShortcut()
   )
 
-  function set(value: string) {
+  function set(value: string | null) {
     setHideShortcut(value)
-    localStorage.setItem(STORAGE_KEY_HIDE_SHORTCUT, value)
+    if (value === null) {
+      localStorage.removeItem(STORAGE_KEY_HIDE_SHORTCUT)
+    } else {
+      localStorage.setItem(STORAGE_KEY_HIDE_SHORTCUT, value)
+    }
   }
 
   return [hideShortcut, set]
