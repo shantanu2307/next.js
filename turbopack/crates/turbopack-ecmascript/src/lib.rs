@@ -77,7 +77,7 @@ use swc_core::{
     },
     quote,
 };
-use tracing::Instrument;
+use tracing::{Instrument, Level, instrument};
 pub use transform::{
     CustomTransformer, EcmascriptInputTransform, EcmascriptInputTransforms, TransformContext,
     TransformPlugin, UnsupportedServerActionIssue,
@@ -746,28 +746,14 @@ impl MergeableModule for EcmascriptModuleAsset {
         modules: Vc<MergeableModulesExposed>,
         entry_points: Vc<MergeableModules>,
     ) -> Result<Vc<Box<dyn ChunkableModule>>> {
-        Ok(Vc::upcast(*MergedEcmascriptModule::new(
-            modules
-                .await?
-                .iter()
-                .map(|(m, exposed)| {
-                    Ok((
-                        ResolvedVc::try_sidecast::<Box<dyn EcmascriptAnalyzable>>(*m)
-                            .context("expected EcmascriptAnalyzable")?,
-                        *exposed,
-                    ))
-                })
-                .collect::<Result<Vec<_>>>()?,
-            entry_points
-                .await?
-                .iter()
-                .map(|m| {
-                    ResolvedVc::try_sidecast::<Box<dyn EcmascriptAnalyzable>>(*m)
-                        .context("expected EcmascriptAnalyzable")
-                })
-                .collect::<Result<Vec<_>>>()?,
-            self.options().to_resolved().await?,
-        )))
+        Ok(Vc::upcast(
+            *MergedEcmascriptModule::new(
+                modules,
+                entry_points,
+                self.options().to_resolved().await?,
+            )
+            .await?,
+        ))
     }
 }
 
@@ -966,7 +952,7 @@ impl EcmascriptModuleContentOptions {
 
             let part_code_gens = part_references
                 .iter()
-                .map(|r| r.code_generation(**chunking_context))
+                .map(|r| r.code_generation(**chunking_context, scope_hoisting_context))
                 .try_join()
                 .await?;
 
@@ -1066,106 +1052,121 @@ impl EcmascriptModuleContent {
         module_options: Vec<Vc<EcmascriptModuleContentOptions>>,
         entry_points: Vec<ResolvedVc<Box<dyn EcmascriptAnalyzable>>>,
     ) -> Result<Vc<Self>> {
-        let modules = modules
-            .into_iter()
-            .map(|(m, exposed)| {
-                (
-                    ResolvedVc::try_sidecast::<Box<dyn EcmascriptChunkPlaceable>>(m).unwrap(),
-                    exposed,
-                )
-            })
-            .collect::<FxIndexMap<_, _>>();
-        let entry_points = entry_points
-            .into_iter()
-            .map(|m| {
-                let m = ResolvedVc::try_sidecast::<Box<dyn EcmascriptChunkPlaceable>>(m).unwrap();
-                (m, modules.get_index_of(&m).unwrap())
-            })
-            .collect::<Vec<_>>();
+        async {
+            let modules = modules
+                .into_iter()
+                .map(|(m, exposed)| {
+                    (
+                        ResolvedVc::try_sidecast::<Box<dyn EcmascriptChunkPlaceable>>(m).unwrap(),
+                        exposed,
+                    )
+                })
+                .collect::<FxIndexMap<_, _>>();
+            let entry_points = entry_points
+                .into_iter()
+                .map(|m| {
+                    let m =
+                        ResolvedVc::try_sidecast::<Box<dyn EcmascriptChunkPlaceable>>(m).unwrap();
+                    (m, modules.get_index_of(&m).unwrap())
+                })
+                .collect::<Vec<_>>();
 
-        let globals_merged = Globals::default();
+            let globals_merged = Globals::default();
 
-        let contents = module_options
-            .iter()
-            .zip(modules.keys().copied())
-            .map(async |(options, module)| {
-                let options = options.await?;
-                let EcmascriptModuleContentOptions {
-                    chunking_context,
-                    parsed,
-                    ident,
-                    specified_module_type,
-                    generate_source_map,
-                    original_source_map,
-                    ..
-                } = &*options;
+            let contents = module_options
+                .iter()
+                .zip(modules.keys().copied())
+                .map(async |(options, module)| {
+                    async {
+                        let options = options.await?;
+                        let EcmascriptModuleContentOptions {
+                            chunking_context,
+                            parsed,
+                            ident,
+                            specified_module_type,
+                            generate_source_map,
+                            original_source_map,
+                            ..
+                        } = &*options;
 
-                let result = process_parse_result(
-                    *parsed,
-                    **ident,
-                    *specified_module_type,
-                    *generate_source_map,
-                    *original_source_map,
-                    *chunking_context.minify_type().await?,
-                    Some(&*options),
-                    Some(ScopeHoistingOptions {
-                        module,
-                        modules: &modules,
-                    }),
-                )
+                        let result = process_parse_result(
+                            *parsed,
+                            **ident,
+                            *specified_module_type,
+                            *generate_source_map,
+                            *original_source_map,
+                            *chunking_context.minify_type().await?,
+                            Some(&*options),
+                            Some(ScopeHoistingOptions {
+                                module,
+                                modules: &modules,
+                            }),
+                        )
+                        .await?;
+
+                        Ok((module, result))
+                    }
+                    .instrument(tracing::trace_span!("process individual module"))
+                    .await
+                })
+                .try_join()
                 .await?;
 
-                Ok((module, result))
-            })
-            .try_join()
-            .await?;
+            let (merged_ast, comments, source_maps, original_source_maps) =
+                merge_modules(contents, &entry_points, &globals_merged).await?;
 
-        let (merged_ast, comments, source_maps, original_source_maps) =
-            merge_modules(contents, &entry_points, &globals_merged).await?;
+            // Use the options from an arbitrary module, since they should all be the same with
+            // regards to minify_type and chunking_context.
+            let options = module_options.last().unwrap().await?;
 
-        // Use the options from an arbitrary module, since they should all be the same.
-        let options = module_options.last().unwrap().await?;
+            let modules_header_width = modules.len().next_power_of_two().trailing_zeros();
+            let content = CodeGenResult {
+                program: merged_ast,
+                source_map: CodeGenResultSourceMap::ScopeHoisting {
+                    modules_header_width,
+                    source_maps,
+                },
+                comments: CodeGenResultComments::ScopeHoisting {
+                    modules_header_width,
+                    comments,
+                },
+                export_contexts: None,
+                is_esm: true,
+                strict: true,
+                original_source_map: CodeGenResultOriginalSourceMap::ScopeHoisting(
+                    original_source_maps,
+                ),
+                minify: *options.chunking_context.minify_type().await?,
+                scope_hoisting_syntax_contexts: None,
+            };
 
-        let modules_header_width = modules.len().next_power_of_two().trailing_zeros();
-        let content = CodeGenResult {
-            program: merged_ast,
-            source_map: CodeGenResultSourceMap::ScopeHoisting {
-                modules_header_width,
-                source_maps,
-            },
-            comments: CodeGenResultComments::ScopeHoisting {
-                modules_header_width,
-                comments,
-            },
-            export_contexts: None,
-            is_esm: true,
-            strict: true,
-            generate_source_map: options.generate_source_map,
-            original_source_map: CodeGenResultOriginalSourceMap::ScopeHoisting(
-                original_source_maps,
-            ),
-            minify: *options.chunking_context.minify_type().await?,
-            scope_hoisting_syntax_contexts: None,
-        };
+            let first_entry = entry_points.first().unwrap().0;
+            let additional_ids = modules
+                .keys()
+                // Additionally set this module factory for all modules that are exposed. The whole
+                // group might be imported via a different entry import in different chunks (we only
+                // ensure that the modules are in the same order, not that they form a subgraph that
+                // is always imported from the same root module).
+                //
+                // Also skip the first entry, which is the name of the chunk item.
+                .filter(|m| {
+                    **m != first_entry
+                        && *modules.get(*m).unwrap() == MergeableModuleExposure::External
+                })
+                .map(|m| m.chunk_item_id(*options.chunking_context).to_resolved())
+                .try_join()
+                .await?
+                .into();
 
-        let first_entry = entry_points.first().unwrap().0;
-        let additional_ids = modules
-            .keys()
-            // Additionally set this module factory for all modules that are exposed. The whole
-            // group might be imported via a different entry import in different chunks (we only
-            // ensure that the modules are in the same order, not that they form a subgraph that is
-            // always imported from the same root module).
-            //
-            // Also skip the first entry, which is the name of the chunk item.
-            .filter(|m| {
-                **m != first_entry && *modules.get(*m).unwrap() == MergeableModuleExposure::External
-            })
-            .map(|m| m.chunk_item_id(*options.chunking_context).to_resolved())
-            .try_join()
-            .await?
-            .into();
-
-        emit_content(content, additional_ids).await
+            emit_content(content, additional_ids)
+                .instrument(tracing::info_span!("emit"))
+                .await
+        }
+        .instrument(tracing::info_span!(
+            "merged EcmascriptModuleContent",
+            modules = module_options.len()
+        ))
+        .await
     }
 }
 
@@ -1177,6 +1178,7 @@ impl EcmascriptModuleContent {
 /// - `sym` being the name of the import.
 ///
 /// This is then used to map back to the variable name and context of the exporting module.
+#[instrument(level = Level::TRACE, skip_all, name = "merge")]
 #[allow(clippy::type_complexity)]
 async fn merge_modules(
     mut contents: Vec<(ResolvedVc<Box<dyn EcmascriptChunkPlaceable>>, CodeGenResult)>,
@@ -1236,22 +1238,21 @@ async fn merge_modules(
                 let eval_context_exports = self.export_contexts.get(&module).unwrap();
                 // TODO looking up an Atom in a Map<RcStr, _>
                 let sym_rc_str: RcStr = sym.as_str().into();
-                let (local, local_ctxt) = if let Some((local, local_ctxt)) =
-                    eval_context_exports.get(&sym_rc_str)
-                {
-                    (Some(local), *local_ctxt)
-                } else if sym.starts_with("__TURBOPACK__imported__module__") {
-                    // The variable corresponding to the `export * as foo from "...";` is generated
-                    // in the module generating the reexport (and it's not listed in the
-                    // eval_context). `EsmAssetReference::code_gen` uses a dummy span when
-                    // generating this variable.
-                    (None, SyntaxContext::empty())
-                } else {
-                    panic!(
-                        "Expected to find a local export for {sym} with ctxt {ctxt:#?} in \
+                let (local, local_ctxt) =
+                    if let Some((local, local_ctxt)) = eval_context_exports.get(&sym_rc_str) {
+                        (Some(local), *local_ctxt)
+                    } else if sym.starts_with("__TURBOPACK__imported__module__") {
+                        // The variable corresponding to the `export * as foo from "...";` is generated
+                        // in the module generating the reexport (and it's not listed in the
+                        // eval_context). `EsmAssetReference::code_gen` uses a dummy span when
+                        // generating this variable.
+                        (None, SyntaxContext::empty())
+                    } else {
+                        panic!(
+                            "Expected to find a local export for {sym} with ctxt {ctxt:#?} in \
                          {eval_context_exports:?}",
-                    );
-                };
+                        );
+                    };
 
                 let global_ctxt = self.get_context_for(module, local_ctxt);
 
@@ -1302,10 +1303,19 @@ async fn merge_modules(
 
     let export_contexts = contents
         .iter()
-        .map(|(module, content)| (*module, content.export_contexts.as_ref().unwrap()))
-        .collect::<FxHashMap<_, _>>();
+        .map(|(module, content)| {
+            Ok((
+                *module,
+                content
+                    .export_contexts
+                    .as_ref()
+                    .context("expected exports contexts")?,
+            ))
+        })
+        .collect::<Result<FxHashMap<_, _>>>()?;
 
     let (merged_ast, inserted) = GLOBALS.set(globals_merged, || {
+        let _ = tracing::trace_span!("merge inner").entered();
         // As an optimization, assume an average number of 5 contexts per module.
         let mut unique_contexts_cache =
             FxHashMap::with_capacity_and_hasher(contents.len() * 5, Default::default());
@@ -1313,6 +1323,7 @@ async fn merge_modules(
         let mut prepare_module =
             |(module, content): &(ResolvedVc<Box<dyn EcmascriptChunkPlaceable>>, CodeGenResult),
              program: &mut Program| {
+                let _ = tracing::trace_span!("prepare module").entered();
                 if let CodeGenResult {
                     scope_hoisting_syntax_contexts: Some(module_contexts),
                     ..
@@ -1325,7 +1336,9 @@ async fn merge_modules(
                                 .next_power_of_two()
                                 .trailing_zeros(),
                             current_module: *module,
-                            current_module_idx: module_contexts.get_index_of(module).unwrap()
+                            current_module_idx: module_contexts
+                                .get_index_of(module)
+                                .context("expected module in module_contexts")?
                                 as u32,
                             reverse_module_contexts: module_contexts
                                 .iter()
@@ -1334,7 +1347,8 @@ async fn merge_modules(
                             export_contexts: &export_contexts,
                             unique_contexts_cache: &mut unique_contexts_cache,
                         });
-                    });
+                        anyhow::Ok(())
+                    })?;
 
                     Ok(match program.take() {
                         Program::Module(module) => Either::Left(module.body.into_iter()),
@@ -1355,6 +1369,7 @@ async fn merge_modules(
 
         let mut inserted_imports = FxHashMap::default();
 
+        let span = tracing::trace_span!("merge ASTs");
         // Replace inserted `__turbopack_merged_esm__(i);` statements with the corresponding
         // ith-module.
         let mut queue = entry_points
@@ -1427,13 +1442,16 @@ async fn merge_modules(
 
             result.push(item);
         }
+        drop(span);
 
+        let span = tracing::trace_span!("hygiene").entered();
         let mut merged_ast = Program::Module(swc_core::ecma::ast::Module {
             body: result,
             span: DUMMY_SP,
             shebang: None,
         });
         merged_ast.visit_mut_with(&mut swc_core::ecma::transforms::base::hygiene::hygiene());
+        drop(span);
 
         anyhow::Ok((merged_ast, inserted))
     })?;
@@ -1543,7 +1561,6 @@ struct CodeGenResult {
     export_contexts: Option<FxHashMap<RcStr, Id>>,
     is_esm: bool,
     strict: bool,
-    generate_source_map: bool,
     original_source_map: CodeGenResultOriginalSourceMap,
     minify: MinifyType,
     scope_hoisting_syntax_contexts:
@@ -1715,8 +1732,12 @@ async fn process_parse_result(
 
             Ok(CodeGenResult {
                 program,
-                source_map: CodeGenResultSourceMap::Single {
-                    source_map: source_map.clone(),
+                source_map: if generate_source_map {
+                    CodeGenResultSourceMap::Single {
+                        source_map: source_map.clone(),
+                    }
+                } else {
+                    CodeGenResultSourceMap::None
                 },
                 comments: CodeGenResultComments::Single {
                     comments,
@@ -1726,7 +1747,6 @@ async fn process_parse_result(
                 export_contexts: Some(export_contexts.into_owned()),
                 is_esm,
                 strict,
-                generate_source_map,
                 original_source_map: CodeGenResultOriginalSourceMap::Single(original_source_map),
                 minify,
                 scope_hoisting_syntax_contexts: retain_syntax_context.map(|(_, ctxts, _)| ctxts),
@@ -1757,12 +1777,11 @@ async fn process_parse_result(
                             body,
                             shebang: None,
                         }),
-                        source_map: CodeGenResultSourceMap::default(),
+                        source_map: CodeGenResultSourceMap::None,
                         comments: CodeGenResultComments::Empty,
                         export_contexts: None,
                         is_esm: false,
                         strict: false,
-                        generate_source_map: false,
                         original_source_map: CodeGenResultOriginalSourceMap::Single(None),
                         minify: MinifyType::NoMinify,
                         scope_hoisting_syntax_contexts: None,
@@ -1785,12 +1804,11 @@ async fn process_parse_result(
                             body,
                             shebang: None,
                         }),
-                        source_map: CodeGenResultSourceMap::default(),
+                        source_map: CodeGenResultSourceMap::None,
                         comments: CodeGenResultComments::Empty,
                         export_contexts: None,
                         is_esm: false,
                         strict: false,
-                        generate_source_map: false,
                         original_source_map: CodeGenResultOriginalSourceMap::Single(None),
                         minify: MinifyType::NoMinify,
                         scope_hoisting_syntax_contexts: None,
@@ -1881,12 +1899,13 @@ async fn emit_content(
         comments,
         is_esm,
         strict,
-        generate_source_map,
         original_source_map,
         minify,
         export_contexts: _,
         scope_hoisting_syntax_contexts: _,
     } = content;
+
+    let generate_source_map = source_map.is_some();
 
     let mut bytes: Vec<u8> = vec![];
     // TODO: Insert this as a sourceless segment so that sourcemaps aren't affected.
@@ -2056,7 +2075,11 @@ fn hygiene_rename_only(
     )
 }
 
+#[derive(Default)]
 enum CodeGenResultSourceMap {
+    #[default]
+    /// No source map should be generated for this module
+    None,
     Single {
         source_map: Arc<SourceMap>,
     },
@@ -2068,9 +2091,20 @@ enum CodeGenResultSourceMap {
     },
 }
 
+impl CodeGenResultSourceMap {
+    fn is_some(&self) -> bool {
+        match self {
+            CodeGenResultSourceMap::None => false,
+            CodeGenResultSourceMap::Single { .. }
+            | CodeGenResultSourceMap::ScopeHoisting { .. } => true,
+        }
+    }
+}
+
 impl Debug for CodeGenResultSourceMap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            CodeGenResultSourceMap::None => write!(f, "CodeGenResultSourceMap::None"),
             CodeGenResultSourceMap::Single { source_map } => {
                 write!(
                     f,
@@ -2090,20 +2124,13 @@ impl Debug for CodeGenResultSourceMap {
     }
 }
 
-impl Default for CodeGenResultSourceMap {
-    fn default() -> Self {
-        CodeGenResultSourceMap::Single {
-            source_map: Arc::new(SourceMap::default()),
-        }
-    }
-}
-
 impl Files for CodeGenResultSourceMap {
     fn try_lookup_source_file(
         &self,
         pos: BytePos,
     ) -> Result<Option<Arc<SourceFile>>, SourceMapLookupError> {
         match self {
+            CodeGenResultSourceMap::None => Ok(None),
             CodeGenResultSourceMap::Single { source_map } => source_map.try_lookup_source_file(pos),
             CodeGenResultSourceMap::ScopeHoisting {
                 modules_header_width,
@@ -2118,6 +2145,7 @@ impl Files for CodeGenResultSourceMap {
 
     fn is_in_file(&self, f: &Arc<SourceFile>, raw_pos: BytePos) -> bool {
         match self {
+            CodeGenResultSourceMap::None => false,
             CodeGenResultSourceMap::Single { .. } => f.start_pos <= raw_pos && raw_pos < f.end_pos,
             CodeGenResultSourceMap::ScopeHoisting { .. } => {
                 // let (module, pos) = CodeGenResultComments::decode_bytepos(*modules_header_width,
@@ -2132,6 +2160,7 @@ impl Files for CodeGenResultSourceMap {
 
     fn map_raw_pos(&self, pos: BytePos) -> BytePos {
         match self {
+            CodeGenResultSourceMap::None => BytePos::DUMMY,
             CodeGenResultSourceMap::Single { .. } => pos,
             CodeGenResultSourceMap::ScopeHoisting {
                 modules_header_width,
@@ -2144,6 +2173,9 @@ impl Files for CodeGenResultSourceMap {
 impl SourceMapper for CodeGenResultSourceMap {
     fn lookup_char_pos(&self, pos: BytePos) -> Loc {
         match self {
+            CodeGenResultSourceMap::None => {
+                panic!("CodeGenResultSourceMap::None cannot lookup_char_pos")
+            }
             CodeGenResultSourceMap::Single { source_map } => source_map.lookup_char_pos(pos),
             CodeGenResultSourceMap::ScopeHoisting {
                 modules_header_width,
@@ -2157,6 +2189,9 @@ impl SourceMapper for CodeGenResultSourceMap {
     }
     fn span_to_lines(&self, sp: Span) -> FileLinesResult {
         match self {
+            CodeGenResultSourceMap::None => {
+                panic!("CodeGenResultSourceMap::None cannot span_to_lines")
+            }
             CodeGenResultSourceMap::Single { source_map } => source_map.span_to_lines(sp),
             CodeGenResultSourceMap::ScopeHoisting {
                 modules_header_width,
@@ -2173,6 +2208,9 @@ impl SourceMapper for CodeGenResultSourceMap {
     }
     fn span_to_string(&self, sp: Span) -> String {
         match self {
+            CodeGenResultSourceMap::None => {
+                panic!("CodeGenResultSourceMap::None cannot span_to_string")
+            }
             CodeGenResultSourceMap::Single { source_map } => source_map.span_to_string(sp),
             CodeGenResultSourceMap::ScopeHoisting {
                 modules_header_width,
@@ -2189,6 +2227,9 @@ impl SourceMapper for CodeGenResultSourceMap {
     }
     fn span_to_filename(&self, sp: Span) -> Arc<FileName> {
         match self {
+            CodeGenResultSourceMap::None => {
+                panic!("CodeGenResultSourceMap::None cannot span_to_filename")
+            }
             CodeGenResultSourceMap::Single { source_map } => source_map.span_to_filename(sp),
             CodeGenResultSourceMap::ScopeHoisting {
                 modules_header_width,
@@ -2205,6 +2246,9 @@ impl SourceMapper for CodeGenResultSourceMap {
     }
     fn merge_spans(&self, sp_lhs: Span, sp_rhs: Span) -> Option<Span> {
         match self {
+            CodeGenResultSourceMap::None => {
+                panic!("CodeGenResultSourceMap::None cannot merge_spans")
+            }
             CodeGenResultSourceMap::Single { source_map } => source_map.merge_spans(sp_lhs, sp_rhs),
             CodeGenResultSourceMap::ScopeHoisting {
                 modules_header_width,
@@ -2234,6 +2278,9 @@ impl SourceMapper for CodeGenResultSourceMap {
     }
     fn call_span_if_macro(&self, sp: Span) -> Span {
         match self {
+            CodeGenResultSourceMap::None => {
+                panic!("CodeGenResultSourceMap::None cannot call_span_if_macro")
+            }
             CodeGenResultSourceMap::Single { source_map } => source_map.call_span_if_macro(sp),
             CodeGenResultSourceMap::ScopeHoisting {
                 modules_header_width,
@@ -2253,6 +2300,9 @@ impl SourceMapper for CodeGenResultSourceMap {
     }
     fn span_to_snippet(&self, sp: Span) -> Result<String, Box<SpanSnippetError>> {
         match self {
+            CodeGenResultSourceMap::None => {
+                panic!("CodeGenResultSourceMap::None cannot span_to_snippet")
+            }
             CodeGenResultSourceMap::Single { source_map } => source_map.span_to_snippet(sp),
             CodeGenResultSourceMap::ScopeHoisting {
                 modules_header_width,

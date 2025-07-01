@@ -951,6 +951,11 @@ export async function openRedbox(browser: Playwright): Promise<void> {
 export async function openDevToolsIndicatorPopover(
   browser: Playwright
 ): Promise<void> {
+  // If the devtools panel is already open, we don't assert the indicator,
+  // and no need to open it again.
+  if (await hasDevToolsPanel(browser)) {
+    return
+  }
   const devToolsIndicator = await assertHasDevToolsIndicator(browser)
 
   try {
@@ -960,6 +965,18 @@ export async function openDevToolsIndicatorPopover(
     Error.captureStackTrace(error, openDevToolsIndicatorPopover)
     throw error
   }
+}
+
+export async function hasDevToolsPanel(browser: Playwright) {
+  const result = await browser.eval(() => {
+    const portal = [].slice
+      .call(document.querySelectorAll('nextjs-portal'))
+      .find((p) => p.shadowRoot.querySelector('[data-nextjs-dialog-overlay]'))
+
+    const root = portal?.shadowRoot
+    return root?.querySelector('[data-nextjs-dialog-overlay]') != null
+  })
+  return result
 }
 
 export async function assertHasDevToolsIndicator(browser: Playwright) {

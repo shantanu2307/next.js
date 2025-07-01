@@ -29,11 +29,6 @@ export {
 export * as serverHooks from '../../client/components/hooks-server-context'
 export { HTTPAccessFallbackBoundary } from '../../client/components/http-access-fallback/error-boundary'
 export { createMetadataComponents } from '../../lib/metadata/metadata'
-// Not being directly used but should be included in the client manifest for /_not-found
-// * ErrorBoundary -> client/components/error-boundary
-// * GlobalError -> client/components/global-error
-import '../../client/components/error-boundary'
-import '../../client/components/builtin/global-error'
 export {
   MetadataBoundary,
   ViewportBoundary,
@@ -49,25 +44,25 @@ import { workAsyncStorage } from '../app-render/work-async-storage.external'
 import { workUnitAsyncStorage } from './work-unit-async-storage.external'
 import { patchFetch as _patchFetch } from '../lib/patch-fetch'
 
-let SegmentViewNode: typeof import('../../next-devtools/userspace/app/segment-explorer').SegmentViewNode =
+let SegmentViewNode: typeof import('../../next-devtools/userspace/app/segment-explorer-node').SegmentViewNode =
+  () => null
+let SegmentViewStateNode: typeof import('../../next-devtools/userspace/app/segment-explorer-node').SegmentViewStateNode =
   () => null
 if (process.env.NODE_ENV === 'development') {
-  SegmentViewNode = (
-    require('../../next-devtools/userspace/app/segment-explorer') as typeof import('../../next-devtools/userspace/app/segment-explorer')
-  ).SegmentViewNode
+  const mod =
+    require('../../next-devtools/userspace/app/segment-explorer-node') as typeof import('../../next-devtools/userspace/app/segment-explorer-node')
+  SegmentViewNode = mod.SegmentViewNode
+  SegmentViewStateNode = mod.SegmentViewStateNode
 }
 
 // patchFetch makes use of APIs such as `React.unstable_postpone` which are only available
 // in the experimental channel of React, so export it from here so that it comes from the bundled runtime
-function patchFetch() {
+export function patchFetch() {
   return _patchFetch({
     workAsyncStorage,
     workUnitAsyncStorage,
   })
 }
 
-export {
-  patchFetch,
-  // Development only
-  SegmentViewNode,
-}
+// Development only
+export { SegmentViewNode, SegmentViewStateNode }

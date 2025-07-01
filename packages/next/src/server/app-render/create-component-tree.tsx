@@ -101,6 +101,7 @@ async function createComponentTreeInternal({
     workStore,
     componentMod: {
       SegmentViewNode,
+      SegmentViewStateNode,
       HTTPAccessFallbackBoundary,
       LayoutRouter,
       RenderFromTemplateContext,
@@ -395,8 +396,7 @@ async function createComponentTreeInternal({
   // Resolve the segment param
   const actualSegment = segmentParam ? segmentParam.treeSegment : segment
   const isSegmentViewEnabled =
-    process.env.NODE_ENV === 'development' &&
-    ctx.renderOpts.devtoolSegmentExplorer
+    process.env.NODE_ENV === 'development' && ctx.renderOpts.devtoolNewPanelUI
   const dir =
     process.env.NEXT_RUNTIME === 'edge'
       ? process.env.__NEXT_EDGE_PROJECT_DIR!
@@ -606,7 +606,11 @@ async function createComponentTreeInternal({
     const loadingFilePath = getConventionPathByType(tree, dir, 'loading')
     if (loadingFilePath) {
       loadingElement = (
-        <SegmentViewNode type="loading" pagePath={loadingFilePath}>
+        <SegmentViewNode
+          key={cacheNodeKey + '-loading'}
+          type="loading"
+          pagePath={loadingFilePath}
+        >
           {loadingElement}
         </SegmentViewNode>
       )
@@ -747,10 +751,12 @@ async function createComponentTreeInternal({
     const pageFilePath =
       getConventionPathByType(tree, dir, 'page') ??
       getConventionPathByType(tree, dir, 'defaultPage')
+    const segmentType = isDefaultSegment ? 'default' : 'page'
     const wrappedPageElement =
       isSegmentViewEnabled && pageFilePath ? (
         <SegmentViewNode
-          type={isDefaultSegment ? 'default' : 'page'}
+          key={cacheNodeKey + '-' + segmentType}
+          type={segmentType}
           pagePath={pageFilePath}
         >
           {pageElement}
@@ -759,6 +765,7 @@ async function createComponentTreeInternal({
         pageElement
       )
 
+    const pagePrefix = ctx.renderOpts.page.replace(/\/page$/, '')
     return [
       actualSegment,
       <React.Fragment key={cacheNodeKey}>
@@ -768,6 +775,7 @@ async function createComponentTreeInternal({
           <MetadataOutlet ready={getViewportReady} />
           {metadataOutlet}
         </OutletBoundary>
+        <SegmentViewStateNode page={pagePrefix} />
       </React.Fragment>,
       parallelRouteCacheNodeSeedData,
       loadingData,
@@ -937,7 +945,7 @@ async function createComponentTreeInternal({
     const layoutFilePath = getConventionPathByType(tree, dir, 'layout')
     const wrappedSegmentNode =
       isSegmentViewEnabled && layoutFilePath ? (
-        <SegmentViewNode type="layout" pagePath={layoutFilePath}>
+        <SegmentViewNode key="layout" type="layout" pagePath={layoutFilePath}>
           {segmentNode}
         </SegmentViewNode>
       ) : (
@@ -1075,8 +1083,7 @@ async function createBoundaryConventionElement({
   tree: LoaderTree
 }) {
   const isSegmentViewEnabled =
-    process.env.NODE_ENV === 'development' &&
-    ctx.renderOpts.devtoolSegmentExplorer
+    process.env.NODE_ENV === 'development' && ctx.renderOpts.devtoolNewPanelUI
   const dir =
     process.env.NEXT_RUNTIME === 'edge'
       ? process.env.__NEXT_EDGE_PROJECT_DIR!
@@ -1092,6 +1099,7 @@ async function createBoundaryConventionElement({
   const wrappedElement =
     isSegmentViewEnabled && element ? (
       <SegmentViewNode
+        key={cacheNodeKey + '-' + conventionName}
         type={conventionName}
         pagePath={getConventionPathByType(tree, dir, conventionName)!}
       >
