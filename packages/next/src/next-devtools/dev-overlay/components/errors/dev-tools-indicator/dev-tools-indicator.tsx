@@ -56,14 +56,14 @@ export function DevToolsIndicator({
       isDevBuilding={state.buildingIndicator}
       isDevRendering={state.renderingIndicator}
       isStaticRoute={state.staticIndicator}
-      toggleVisibility={() => {
-        setIsDevToolsIndicatorVisible(!isDevToolsIndicatorVisible)
-      }}
       hide={() => {
         setIsDevToolsIndicatorVisible(false)
         fetch('/__nextjs_disable_dev_indicator', {
           method: 'POST',
         })
+      }}
+      toggleVisibility={() => {
+        setIsDevToolsIndicatorVisible(!isDevToolsIndicatorVisible)
       }}
       isTurbopack={!!process.env.TURBOPACK}
       disabled={state.disableDevIndicator || !isDevToolsIndicatorVisible}
