@@ -1446,7 +1446,7 @@ export const defaultConfig = {
       static: 300,
     },
     allowDevelopmentBuild: undefined,
-    reactCompiler: undefined,
+    reactCompiler: true,
     staticGenerationRetryCount: undefined,
     serverComponentsHmrCache: true,
     staticGenerationMaxConcurrency: 8,
