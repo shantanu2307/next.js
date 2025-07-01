@@ -12,14 +12,21 @@ describe('css-chunking', () => {
     async () => {
       const $ = await next.render$('/')
       const stylesheets = $('link[rel="stylesheet"]')
-      stylesheets.each(async (_, element) => {
-        const href = element.attribs.href
-        const result = await next.fetch(href)
-        const css = await result.text()
+      const cssResults = await Promise.all(
+        stylesheets
+          .map(async (_, element) => {
+            const href = element.attribs.href
+            const result = await next.fetch(href)
+            return await result.text()
+          })
+          .get()
+      )
 
+      // eslint-disable-next-line jest/no-standalone-expect
+      expect(cssResults).toEqual(
         // eslint-disable-next-line jest/no-standalone-expect
-        expect(css).not.toContain('.otherPage')
-      })
+        expect.arrayContaining([expect.not.stringContaining('.otherPage')])
+      )
     }
   )
 })
