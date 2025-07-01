@@ -338,8 +338,7 @@ export const DEVTOOLS_PANEL_STYLES = css`
     padding: 4px 12px;
     font-size: 14px;
     font-weight: 500;
-
-    transition: all 0.2s ease;
+    transition: background-color 200ms ease;
 
     &:hover {
       background-color: var(--color-gray-200);
@@ -387,7 +386,9 @@ export const DEVTOOLS_PANEL_STYLES = css`
     padding: 6px;
     color: var(--color-gray-1000);
     border-radius: 4px;
-    transition: all 0.2s ease;
+    transition-property: background-color, color;
+    transition-duration: 200ms;
+    transition-timing-function: ease;
 
     &:hover {
       background-color: var(--color-gray-200);
