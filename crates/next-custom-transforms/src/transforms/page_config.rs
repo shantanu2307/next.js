@@ -1,9 +1,9 @@
 use chrono::Utc;
 use swc_core::{
-    common::{errors::HANDLER, Span, DUMMY_SP},
+    common::{DUMMY_SP, Span, errors::HANDLER},
     ecma::{
         ast::*,
-        visit::{fold_pass, Fold, FoldWith},
+        visit::{Fold, FoldWith, fold_pass},
     },
 };
 
@@ -171,8 +171,10 @@ impl Fold for PageConfig {
 impl PageConfig {
     fn handle_error(&mut self, details: &str, span: Span) {
         if self.is_page_file {
-            let message = format!("Invalid page config export found. {details} \
-      See: https://nextjs.org/docs/messages/invalid-page-config");
+            let message = format!(
+                "Invalid page config export found. {details} \
+      See: https://nextjs.org/docs/messages/invalid-page-config"
+            );
             HANDLER.with(|handler| handler.struct_span_err(span, &message).emit());
         }
     }
