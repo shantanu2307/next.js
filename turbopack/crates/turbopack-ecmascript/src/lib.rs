@@ -80,7 +80,7 @@ use swc_core::{
 use tracing::{Instrument, Level, instrument};
 pub use transform::{
     CustomTransformer, EcmascriptInputTransform, EcmascriptInputTransforms, TransformContext,
-    TransformPlugin, UnsupportedServerActionIssue,
+    TransformPlugin,
 };
 use turbo_rcstr::{RcStr, rcstr};
 use turbo_tasks::{
@@ -1238,22 +1238,21 @@ async fn merge_modules(
                 let eval_context_exports = self.export_contexts.get(&module).unwrap();
                 // TODO looking up an Atom in a Map<RcStr, _>
                 let sym_rc_str: RcStr = sym.as_str().into();
-                let (local, local_ctxt) = if let Some((local, local_ctxt)) =
-                    eval_context_exports.get(&sym_rc_str)
-                {
-                    (Some(local), *local_ctxt)
-                } else if sym.starts_with("__TURBOPACK__imported__module__") {
-                    // The variable corresponding to the `export * as foo from "...";` is generated
-                    // in the module generating the reexport (and it's not listed in the
-                    // eval_context). `EsmAssetReference::code_gen` uses a dummy span when
-                    // generating this variable.
-                    (None, SyntaxContext::empty())
-                } else {
-                    panic!(
-                        "Expected to find a local export for {sym} with ctxt {ctxt:#?} in \
+                let (local, local_ctxt) =
+                    if let Some((local, local_ctxt)) = eval_context_exports.get(&sym_rc_str) {
+                        (Some(local), *local_ctxt)
+                    } else if sym.starts_with("__TURBOPACK__imported__module__") {
+                        // The variable corresponding to the `export * as foo from "...";` is generated
+                        // in the module generating the reexport (and it's not listed in the
+                        // eval_context). `EsmAssetReference::code_gen` uses a dummy span when
+                        // generating this variable.
+                        (None, SyntaxContext::empty())
+                    } else {
+                        panic!(
+                            "Expected to find a local export for {sym} with ctxt {ctxt:#?} in \
                          {eval_context_exports:?}",
-                    );
-                };
+                        );
+                    };
 
                 let global_ctxt = self.get_context_for(module, local_ctxt);
 
@@ -1756,7 +1755,7 @@ async fn process_parse_result(
         async |parse_result| -> Result<CodeGenResult> {
             Ok(match parse_result {
                 ParseResult::Ok { .. } => unreachable!(),
-                ParseResult::Unparseable { messages } => {
+                ParseResult::Unparsable { messages } => {
                     let path = ident.path().to_string().await?;
                     let error_messages = messages
                         .as_ref()
@@ -1768,7 +1767,7 @@ async fn process_parse_result(
                             "const e = new Error($msg);" as Stmt,
                             msg: Expr = Expr::Lit(msg.into()),
                         ),
-                        quote!("e.code = 'MODULE_UNPARSEABLE';" as Stmt),
+                        quote!("e.code = 'MODULE_UNPARSABLE';" as Stmt),
                         quote!("throw e;" as Stmt),
                     ];
 
@@ -1796,7 +1795,7 @@ async fn process_parse_result(
                             "const e = new Error($msg);" as Stmt,
                             msg: Expr = Expr::Lit(msg.into()),
                         ),
-                        quote!("e.code = 'MODULE_UNPARSEABLE';" as Stmt),
+                        quote!("e.code = 'MODULE_UNPARSABLE';" as Stmt),
                         quote!("throw e;" as Stmt),
                     ];
                     CodeGenResult {

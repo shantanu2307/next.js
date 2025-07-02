@@ -28,7 +28,7 @@ use turbo_esregex::EsRegex;
 use turbo_rcstr::RcStr;
 use turbo_tasks::{FxIndexMap, FxIndexSet, Vc};
 use turbopack_core::compile_time_info::{
-    CompileTimeDefineValue, DefineableNameSegment, FreeVarReference,
+    CompileTimeDefineValue, DefinableNameSegment, FreeVarReference,
 };
 
 use self::imports::ImportAnnotations;
@@ -865,7 +865,7 @@ impl JsValue {
         }
     }
 
-    pub fn alternatives_with_addtional_property(
+    pub fn alternatives_with_additional_property(
         list: Vec<JsValue>,
         logical_property: LogicalProperty,
     ) -> Self {
@@ -1704,10 +1704,7 @@ impl JsValue {
             }
             JsValue::WellKnownObject(obj) => {
                 let (name, explainer) = match obj {
-                    WellKnownObjectKind::GlobalObject => (
-                        "Object",
-                        "The global Object variable",
-                    ),
+                    WellKnownObjectKind::GlobalObject => ("Object", "The global Object variable"),
                     WellKnownObjectKind::PathModule | WellKnownObjectKind::PathModuleDefault => (
                         "path",
                         "The Node.js path module: https://nodejs.org/api/path.html",
@@ -1724,7 +1721,8 @@ impl JsValue {
                         "url",
                         "The Node.js url module: https://nodejs.org/api/url.html",
                     ),
-                    WellKnownObjectKind::ChildProcess | WellKnownObjectKind::ChildProcessDefault => (
+                    WellKnownObjectKind::ChildProcess
+                    | WellKnownObjectKind::ChildProcessDefault => (
                         "child_process",
                         "The Node.js child_process module: https://nodejs.org/api/child_process.html",
                     ),
@@ -1750,24 +1748,21 @@ impl JsValue {
                     ),
                     WellKnownObjectKind::NodeExpressApp => (
                         "express",
-                        "The Node.js express package: https://github.com/expressjs/express"
+                        "The Node.js express package: https://github.com/expressjs/express",
                     ),
                     WellKnownObjectKind::NodeProtobufLoader => (
                         "@grpc/proto-loader",
-                        "The Node.js @grpc/proto-loader package: https://github.com/grpc/grpc-node"
+                        "The Node.js @grpc/proto-loader package: https://github.com/grpc/grpc-node",
                     ),
                     WellKnownObjectKind::NodeBuffer => (
                         "Buffer",
-                        "The Node.js Buffer object: https://nodejs.org/api/buffer.html#class-buffer"
+                        "The Node.js Buffer object: https://nodejs.org/api/buffer.html#class-buffer",
                     ),
                     WellKnownObjectKind::RequireCache => (
                         "require.cache",
-                        "The CommonJS require.cache object: https://nodejs.org/api/modules.html#requirecache"
+                        "The CommonJS require.cache object: https://nodejs.org/api/modules.html#requirecache",
                     ),
-                    WellKnownObjectKind::ImportMeta => (
-                        "import.meta",
-                        "The import.meta object"
-                    ),
+                    WellKnownObjectKind::ImportMeta => ("import.meta", "The import.meta object"),
                 };
                 if depth > 0 {
                     let i = hints.len();
@@ -1779,7 +1774,7 @@ impl JsValue {
             }
             JsValue::WellKnownFunction(func) => {
                 let (name, explainer) = match func {
-                   WellKnownFunctionKind::ObjectAssign => (
+                    WellKnownFunctionKind::ObjectAssign => (
                         "Object.assign".to_string(),
                         "Object.assign method: https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Object/assign",
                     ),
@@ -1797,15 +1792,34 @@ impl JsValue {
                     ),
                     WellKnownFunctionKind::Import => (
                         "import".to_string(),
-                        "The dynamic import() method from the ESM specification: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#dynamic_imports"
+                        "The dynamic import() method from the ESM specification: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#dynamic_imports",
                     ),
-                    WellKnownFunctionKind::Require => ("require".to_string(), "The require method from CommonJS"),
-                    WellKnownFunctionKind::RequireResolve => ("require.resolve".to_string(), "The require.resolve method from CommonJS"),
-                    WellKnownFunctionKind::RequireContext => ("require.context".to_string(), "The require.context method from webpack"),
-                    WellKnownFunctionKind::RequireContextRequire(..) => ("require.context(...)".to_string(), "The require.context(...) method from webpack: https://webpack.js.org/api/module-methods/#requirecontext"),
-                    WellKnownFunctionKind::RequireContextRequireKeys(..) => ("require.context(...).keys".to_string(), "The require.context(...).keys method from webpack: https://webpack.js.org/guides/dependency-management/#requirecontext"),
-                    WellKnownFunctionKind::RequireContextRequireResolve(..) => ("require.context(...).resolve".to_string(), "The require.context(...).resolve method from webpack: https://webpack.js.org/guides/dependency-management/#requirecontext"),
-                    WellKnownFunctionKind::Define => ("define".to_string(), "The define method from AMD"),
+                    WellKnownFunctionKind::Require => {
+                        ("require".to_string(), "The require method from CommonJS")
+                    }
+                    WellKnownFunctionKind::RequireResolve => (
+                        "require.resolve".to_string(),
+                        "The require.resolve method from CommonJS",
+                    ),
+                    WellKnownFunctionKind::RequireContext => (
+                        "require.context".to_string(),
+                        "The require.context method from webpack",
+                    ),
+                    WellKnownFunctionKind::RequireContextRequire(..) => (
+                        "require.context(...)".to_string(),
+                        "The require.context(...) method from webpack: https://webpack.js.org/api/module-methods/#requirecontext",
+                    ),
+                    WellKnownFunctionKind::RequireContextRequireKeys(..) => (
+                        "require.context(...).keys".to_string(),
+                        "The require.context(...).keys method from webpack: https://webpack.js.org/guides/dependency-management/#requirecontext",
+                    ),
+                    WellKnownFunctionKind::RequireContextRequireResolve(..) => (
+                        "require.context(...).resolve".to_string(),
+                        "The require.context(...).resolve method from webpack: https://webpack.js.org/guides/dependency-management/#requirecontext",
+                    ),
+                    WellKnownFunctionKind::Define => {
+                        ("define".to_string(), "The define method from AMD")
+                    }
                     WellKnownFunctionKind::FsReadMethod(name) => (
                         format!("fs.{name}"),
                         "A file reading method from the Node.js fs module: https://nodejs.org/api/fs.html",
@@ -1844,43 +1858,43 @@ impl JsValue {
                     ),
                     WellKnownFunctionKind::NodeGypBuild => (
                         "node-gyp-build".to_string(),
-                        "The Node.js node-gyp-build module: https://github.com/prebuild/node-gyp-build"
+                        "The Node.js node-gyp-build module: https://github.com/prebuild/node-gyp-build",
                     ),
                     WellKnownFunctionKind::NodeBindings => (
                         "bindings".to_string(),
-                        "The Node.js bindings module: https://github.com/TooTallNate/node-bindings"
+                        "The Node.js bindings module: https://github.com/TooTallNate/node-bindings",
                     ),
                     WellKnownFunctionKind::NodeExpress => (
                         "express".to_string(),
-                        "require('express')() : https://github.com/expressjs/express"
+                        "require('express')() : https://github.com/expressjs/express",
                     ),
                     WellKnownFunctionKind::NodeExpressSet => (
                         "set".to_string(),
-                        "require('express')().set('view engine', 'jade')  https://github.com/expressjs/express"
+                        "require('express')().set('view engine', 'jade')  https://github.com/expressjs/express",
                     ),
                     WellKnownFunctionKind::NodeStrongGlobalize => (
-                      "SetRootDir".to_string(),
-                      "require('strong-globalize')()  https://github.com/strongloop/strong-globalize"
+                        "SetRootDir".to_string(),
+                        "require('strong-globalize')()  https://github.com/strongloop/strong-globalize",
                     ),
                     WellKnownFunctionKind::NodeStrongGlobalizeSetRootDir => (
-                      "SetRootDir".to_string(),
-                      "require('strong-globalize').SetRootDir(__dirname)  https://github.com/strongloop/strong-globalize"
+                        "SetRootDir".to_string(),
+                        "require('strong-globalize').SetRootDir(__dirname)  https://github.com/strongloop/strong-globalize",
                     ),
                     WellKnownFunctionKind::NodeResolveFrom => (
-                      "resolveFrom".to_string(),
-                      "require('resolve-from')(__dirname, 'node-gyp/bin/node-gyp')  https://github.com/sindresorhus/resolve-from"
+                        "resolveFrom".to_string(),
+                        "require('resolve-from')(__dirname, 'node-gyp/bin/node-gyp')  https://github.com/sindresorhus/resolve-from",
                     ),
                     WellKnownFunctionKind::NodeProtobufLoad => (
-                      "load/loadSync".to_string(),
-                      "require('@grpc/proto-loader').load(filepath, { includeDirs: [root] }) https://github.com/grpc/grpc-node"
+                        "load/loadSync".to_string(),
+                        "require('@grpc/proto-loader').load(filepath, { includeDirs: [root] }) https://github.com/grpc/grpc-node",
                     ),
                     WellKnownFunctionKind::WorkerConstructor => (
-                      "Worker".to_string(),
-                      "The standard Worker constructor: https://developer.mozilla.org/en-US/docs/Web/API/Worker/Worker"
+                        "Worker".to_string(),
+                        "The standard Worker constructor: https://developer.mozilla.org/en-US/docs/Web/API/Worker/Worker",
                     ),
                     WellKnownFunctionKind::URLConstructor => (
-                      "URL".to_string(),
-                      "The standard URL constructor: https://developer.mozilla.org/en-US/docs/Web/API/URL/URL"
+                        "URL".to_string(),
+                        "The standard URL constructor: https://developer.mozilla.org/en-US/docs/Web/API/URL/URL",
                     ),
                 };
                 if depth > 0 {
@@ -1959,43 +1973,43 @@ impl JsValue {
     }
 }
 
-// Defineable name management
+// Definable name management
 impl JsValue {
-    /// When the value has a user-defineable name, return the length of it (in segments). Otherwise
+    /// When the value has a user-definable name, return the length of it (in segments). Otherwise
     /// returns None.
-    /// - any free var has itself as user-defineable name: ["foo"]
+    /// - any free var has itself as user-definable name: ["foo"]
     /// - any member access adds the identifier as segment after the object: ["foo", "prop"]
-    /// - some well-known objects/functions have a user-defineable names: ["import"]
-    /// - member calls without arguments also have a user-defineable name which is the property with
+    /// - some well-known objects/functions have a user-definable names: ["import"]
+    /// - member calls without arguments also have a user-definable name which is the property with
     ///   `()` appended: ["foo", "prop()"]
     /// - typeof expressions add `typeof` after the argument's segments: ["foo", "typeof"]
-    pub fn get_defineable_name_len(&self) -> Option<usize> {
+    pub fn get_definable_name_len(&self) -> Option<usize> {
         match self {
             JsValue::FreeVar(_) => Some(1),
             JsValue::Member(_, obj, prop) if prop.as_str().is_some() => {
-                Some(obj.get_defineable_name_len()? + 1)
+                Some(obj.get_definable_name_len()? + 1)
             }
             JsValue::WellKnownObject(obj) => obj.as_define_name().map(|d| d.len()),
             JsValue::WellKnownFunction(func) => func.as_define_name().map(|d| d.len()),
             JsValue::MemberCall(_, callee, prop, args)
                 if args.is_empty() && prop.as_str().is_some() =>
             {
-                Some(callee.get_defineable_name_len()? + 1)
+                Some(callee.get_definable_name_len()? + 1)
             }
-            JsValue::TypeOf(_, arg) => Some(arg.get_defineable_name_len()? + 1),
+            JsValue::TypeOf(_, arg) => Some(arg.get_definable_name_len()? + 1),
 
             _ => None,
         }
     }
 
-    /// Returns a reverse iterator over the segments of the user-defineable
+    /// Returns a reverse iterator over the segments of the user-definable
     /// name. e. g. `foo.bar().baz` would yield `baz`, `bar()`, `foo`.
     /// `(1+2).foo.baz` would also yield `baz`, `foo` even while the value is
-    /// not a complete user-defineable name. Before calling this method you must
-    /// use [JsValue::get_defineable_name_len] to determine if the value has a
-    /// user-defineable name at all.
-    pub fn iter_defineable_name_rev(&self) -> DefineableNameIter<'_> {
-        DefineableNameIter {
+    /// not a complete user-definable name. Before calling this method you must
+    /// use [JsValue::get_definable_name_len] to determine if the value has a
+    /// user-definable name at all.
+    pub fn iter_definable_name_rev(&self) -> DefinableNameIter<'_> {
+        DefinableNameIter {
             next: Some(self),
             index: 0,
         }
@@ -2010,12 +2024,12 @@ impl JsValue {
         &self,
         var_graph: Option<&VarGraph>,
         free_var_references: &'a FxIndexMap<
-            DefineableNameSegment,
-            FxIndexMap<Vec<DefineableNameSegment>, T>,
+            DefinableNameSegment,
+            FxIndexMap<Vec<DefinableNameSegment>, T>,
         >,
-        prop: &DefineableNameSegment,
+        prop: &DefinableNameSegment,
     ) -> Option<&'a T> {
-        if let Some(def_name_len) = self.get_defineable_name_len()
+        if let Some(def_name_len) = self.get_definable_name_len()
             && let Some(references) = free_var_references.get(prop)
         {
             for (name, value) in references {
@@ -2024,9 +2038,9 @@ impl JsValue {
                 }
 
                 let name_rev_it = name.iter().map(Cow::Borrowed).rev();
-                if name_rev_it.eq(self.iter_defineable_name_rev()) {
+                if name_rev_it.eq(self.iter_definable_name_rev()) {
                     if let Some(var_graph) = var_graph
-                        && let DefineableNameSegment::Name(first_str) = name.first().unwrap()
+                        && let DefinableNameSegment::Name(first_str) = name.first().unwrap()
                     {
                         let first_str: &str = first_str;
                         if var_graph
@@ -2050,9 +2064,9 @@ impl JsValue {
     /// Returns any matching defined replacement that matches this value.
     pub fn match_define<'a, T>(
         &self,
-        defines: &'a FxIndexMap<Vec<DefineableNameSegment>, T>,
+        defines: &'a FxIndexMap<Vec<DefinableNameSegment>, T>,
     ) -> Option<&'a T> {
-        if let Some(def_name_len) = self.get_defineable_name_len() {
+        if let Some(def_name_len) = self.get_definable_name_len() {
             for (name, value) in defines.iter() {
                 if name.len() != def_name_len {
                     continue;
@@ -2062,7 +2076,7 @@ impl JsValue {
                     .iter()
                     .map(Cow::Borrowed)
                     .rev()
-                    .eq(self.iter_defineable_name_rev())
+                    .eq(self.iter_definable_name_rev())
                 {
                     return Some(value);
                 }
@@ -2073,13 +2087,13 @@ impl JsValue {
     }
 }
 
-pub struct DefineableNameIter<'a> {
+pub struct DefinableNameIter<'a> {
     next: Option<&'a JsValue>,
     index: usize,
 }
 
-impl<'a> Iterator for DefineableNameIter<'a> {
-    type Item = Cow<'a, DefineableNameSegment>;
+impl<'a> Iterator for DefinableNameIter<'a> {
+    type Item = Cow<'a, DefinableNameSegment>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let value = self.next.take()?;
@@ -2113,7 +2127,7 @@ impl<'a> Iterator for DefineableNameIter<'a> {
             }
             JsValue::TypeOf(_, arg) => {
                 self.next = Some(arg);
-                DefineableNameSegment::TypeOf
+                DefinableNameSegment::TypeOf
             }
 
             _ => return None,

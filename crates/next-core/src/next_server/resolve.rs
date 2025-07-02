@@ -93,7 +93,9 @@ impl AfterResolvePlugin for ExternalCjsModulesResolvePlugin {
         };
 
         // from https://github.com/vercel/next.js/blob/8d1c619ad650f5d147207f267441caf12acd91d1/packages/next/src/build/handle-externals.ts#L188
-        let never_external_regex = lazy_regex::regex!("^(?:private-next-pages\\/|next\\/(?:dist\\/pages\\/|(?:app|cache|document|link|form|head|image|legacy\\/image|constants|dynamic|script|navigation|headers|router|compat\\/router|server)$)|string-hash|private-next-rsc-action-validate|private-next-rsc-action-client-wrapper|private-next-rsc-server-reference|private-next-rsc-cache-wrapper$)");
+        let never_external_regex = lazy_regex::regex!(
+            "^(?:private-next-pages\\/|next\\/(?:dist\\/pages\\/|(?:app|cache|document|link|form|head|image|legacy\\/image|constants|dynamic|script|navigation|headers|router|compat\\/router|server)$)|string-hash|private-next-rsc-action-validate|private-next-rsc-action-client-wrapper|private-next-rsc-server-reference|private-next-rsc-cache-wrapper$)"
+        );
 
         let Pattern::Constant(package_subpath) = package_subpath else {
             return Ok(ResolveResultOption::none());
@@ -237,7 +239,7 @@ impl AfterResolvePlugin for ExternalCjsModulesResolvePlugin {
                     && package_subpath != "/"
                     && !request_str.ends_with(".js")
                 {
-                    // We have a fallback solution for convinience: If user doesn't
+                    // We have a fallback solution for convenience: If user doesn't
                     // have an extension in the request we try to append ".js"
                     // automatically
                     request_str.push_str(".js");
@@ -448,6 +450,8 @@ async fn packages_glob(packages: Vc<Vec<RcStr>>) -> Result<Vc<OptionPackagesGlob
 
 #[turbo_tasks::value]
 struct ExternalizeIssue {
+    // TODO(PACK-4879): The filepath is incorrect and there should be a fine grained source
+    // location pointing at the import/require
     file_path: FileSystemPath,
     package: RcStr,
     request_str: RcStr,
@@ -463,9 +467,9 @@ impl Issue for ExternalizeIssue {
     #[turbo_tasks::function]
     fn title(&self) -> Vc<StyledString> {
         StyledString::Line(vec![
-            StyledString::Text("Package ".into()),
+            StyledString::Text(rcstr!("Package ")),
             StyledString::Code(self.package.clone()),
-            StyledString::Text(" can't be external".into()),
+            StyledString::Text(rcstr!(" can't be external")),
         ])
         .cell()
     }
@@ -485,11 +489,11 @@ impl Issue for ExternalizeIssue {
         Ok(Vc::cell(Some(
             StyledString::Stack(vec![
                 StyledString::Line(vec![
-                    StyledString::Text("The request ".into()),
+                    StyledString::Text(rcstr!("The request ")),
                     StyledString::Code(self.request_str.clone()),
-                    StyledString::Text(" matches ".into()),
-                    StyledString::Code("serverExternalPackages".into()),
-                    StyledString::Text(" (or the default list).".into()),
+                    StyledString::Text(rcstr!(" matches ")),
+                    StyledString::Code(rcstr!("serverExternalPackages")),
+                    StyledString::Text(rcstr!(" (or the default list).")),
                 ]),
                 StyledString::Line(self.reason.clone()),
             ])
