@@ -124,16 +124,20 @@ async function createComponentTreeInternal({
   const { page, conventionPath, segment, modules, parallelRoutes } =
     parseLoaderTree(tree)
 
-  const {
+  let {
     layout,
     template,
     error,
     loading,
-    'not-found': notFound,
+    // TOOD: fix notFound() in root layout issue
+    // TODO: do not pass any not-found / forbidden / unauthorized to LayoutRouter as prop, but instead
+    // access them from the parallel routes map
+    // 'not-found': notFound,
     forbidden,
     unauthorized,
   } = modules
 
+  const notFound = undefined // TODO: empty this
   const injectedCSSWithCurrentLayout = new Set(injectedCSS)
   const injectedJSWithCurrentLayout = new Set(injectedJS)
   const injectedFontPreloadTagsWithCurrentLayout = new Set(
@@ -444,9 +448,9 @@ async function createComponentTreeInternal({
         const isChildrenRouteKey = parallelRouteKey === 'children'
         const parallelRoute = parallelRoutes[parallelRouteKey]
 
-        const notFoundComponent = isChildrenRouteKey
-          ? notFoundElement
-          : undefined
+        // const notFoundComponent = isChildrenRouteKey
+        //   ? notFoundElement
+        //   : undefined
 
         const forbiddenComponent = isChildrenRouteKey
           ? forbiddenElement
@@ -510,32 +514,34 @@ async function createComponentTreeInternal({
             }
           }
 
-          const seedData = await createComponentTreeInternal({
-            loaderTree: parallelRoute,
-            parentParams: currentParams,
-            rootLayoutIncluded: rootLayoutIncludedAtThisLevelOrAbove,
-            injectedCSS: injectedCSSWithCurrentLayout,
-            injectedJS: injectedJSWithCurrentLayout,
-            injectedFontPreloadTags: injectedFontPreloadTagsWithCurrentLayout,
-            // `getMetadataReady` and `getViewportReady` are used to conditionally throw. In the case of parallel routes we will have more than one page
-            // but we only want to throw on the first one.
-            getMetadataReady: isChildrenRouteKey
-              ? getMetadataReady
-              : () => Promise.resolve(),
-            getViewportReady: isChildrenRouteKey
-              ? getViewportReady
-              : () => Promise.resolve(),
-            ctx,
-            missingSlots,
-            preloadCallbacks,
-            authInterrupts,
-            // `StreamingMetadataOutlet` is used to conditionally throw. In the case of parallel routes we will have more than one page
-            // but we only want to throw on the first one.
-            StreamingMetadataOutlet: isChildrenRouteKey
-              ? StreamingMetadataOutlet
-              : null,
-          })
-
+          let seedData: CacheNodeSeedData | null = null
+          if (parallelRouteKey !== '__not_found__') {
+            seedData = await createComponentTreeInternal({
+              loaderTree: parallelRoute,
+              parentParams: currentParams,
+              rootLayoutIncluded: rootLayoutIncludedAtThisLevelOrAbove,
+              injectedCSS: injectedCSSWithCurrentLayout,
+              injectedJS: injectedJSWithCurrentLayout,
+              injectedFontPreloadTags: injectedFontPreloadTagsWithCurrentLayout,
+              // `getMetadataReady` and `getViewportReady` are used to conditionally throw. In the case of parallel routes we will have more than one page
+              // but we only want to throw on the first one.
+              getMetadataReady: isChildrenRouteKey
+                ? getMetadataReady
+                : () => Promise.resolve(),
+              getViewportReady: isChildrenRouteKey
+                ? getViewportReady
+                : () => Promise.resolve(),
+              ctx,
+              missingSlots,
+              preloadCallbacks,
+              authInterrupts,
+              // `StreamingMetadataOutlet` is used to conditionally throw. In the case of parallel routes we will have more than one page
+              // but we only want to throw on the first one.
+              StreamingMetadataOutlet: isChildrenRouteKey
+                ? StreamingMetadataOutlet
+                : null,
+            })
+          }
           childCacheNodeSeedData = seedData
         }
 
@@ -578,7 +584,7 @@ async function createComponentTreeInternal({
             }
             templateStyles={templateStyles}
             templateScripts={templateScripts}
-            notFound={notFoundComponent}
+            // notFound={notFoundComponent}
             forbidden={forbiddenComponent}
             unauthorized={unauthorizedComponent}
             // Since gracefullyDegrade only applies to bots, only

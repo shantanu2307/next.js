@@ -40,6 +40,7 @@ import { createRouterCacheKey } from './router-reducer/create-router-cache-key'
 import { hasInterceptionRouteInCurrentTree } from './router-reducer/reducers/has-interception-route-in-current-tree'
 import { dispatchAppRouterAction } from './use-action-queue'
 import { useRouterBFCache, type RouterBFCacheEntry } from './bfcache'
+import { PAGE_SEGMENT_KEY } from '../../shared/lib/segment'
 
 const Activity = process.env.__NEXT_ROUTER_BF_CACHE
   ? (require('react') as typeof import('react')).unstable_Activity
@@ -335,11 +336,13 @@ function InnerLayoutRouter({
   segmentPath,
   cacheNode,
   url,
+  isNotFoundSegment,
 }: {
   tree: FlightRouterState
   segmentPath: FlightSegmentPath
   cacheNode: CacheNode
   url: string
+  isNotFoundSegment: boolean
 }) {
   const context = useContext(GlobalLayoutRouterContext)
   if (!context) {
@@ -392,6 +395,7 @@ function InnerLayoutRouter({
         {
           flightRouterState: refetchTree,
           nextUrl: includeNextUrl ? context.nextUrl : null,
+          isNotFoundSegment,
         }
       ).then((serverResponse) => {
         startTransition(() => {
@@ -503,7 +507,7 @@ export default function OuterLayoutRouter({
   templateStyles,
   templateScripts,
   template,
-  notFound,
+  // notFound,
   forbidden,
   unauthorized,
   gracefullyDegrade,
@@ -515,7 +519,7 @@ export default function OuterLayoutRouter({
   templateStyles: React.ReactNode | undefined
   templateScripts: React.ReactNode | undefined
   template: React.ReactNode
-  notFound: React.ReactNode | undefined
+  // notFound: React.ReactNode | undefined
   forbidden: React.ReactNode | undefined
   unauthorized: React.ReactNode | undefined
   gracefullyDegrade?: boolean
@@ -526,18 +530,48 @@ export default function OuterLayoutRouter({
   }
 
   const { parentTree, parentCacheNode, parentSegmentPath, url } = context
+  const parentTreeSegment = parentTree[0]
 
   // Get the CacheNode for this segment by reading it from the parent segment's
   // child map.
+  // EXAMPLE:
+  //      children -> ...
+  //      __not_found__ -> ...
   const parentParallelRoutes = parentCacheNode.parallelRoutes
+
+  // EXAMPLE:
+  //       parallelRouterKey: "children"
+  //       segmentMap:
+  //             __PAGE__ -> ... (cacheNode)
+  // should be named as: childrenSegmentMap
   let segmentMap = parentParallelRoutes.get(parallelRouterKey)
+  let notFoundSegmentMap = parentParallelRoutes.get('__not_found__')
+  let notFoundCacheNode = notFoundSegmentMap?.get(PAGE_SEGMENT_KEY)
+  let notFoundTree = parentTree[1]['__not_found__']
+  let notFoundSegmentPath =
+    parentSegmentPath === null
+      ? ['__not_found__']
+      : parentSegmentPath.concat([parentTreeSegment, '__not_found__'])
+
+  const renderNotFoundCacheNode = notFoundCacheNode ? (
+    // TODO: can we remove this Suspense to avoid flash of blank page?
+    <Suspense>
+      <InnerLayoutRouter
+        url={`${url}`}
+        tree={notFoundTree}
+        cacheNode={notFoundCacheNode}
+        segmentPath={notFoundSegmentPath}
+        isNotFoundSegment={true}
+      />
+    </Suspense>
+  ) : null
+
   // If the parallel router cache node does not exist yet, create it.
   // This writes to the cache when there is no item in the cache yet. It never *overwrites* existing cache items which is why it's safe in concurrent mode.
   if (!segmentMap) {
     segmentMap = new Map()
     parentParallelRoutes.set(parallelRouterKey, segmentMap)
   }
-  const parentTreeSegment = parentTree[0]
   const segmentPath =
     parentSegmentPath === null
       ? // TODO: The root segment value is currently omitted from the segment
@@ -634,7 +668,7 @@ export default function OuterLayoutRouter({
             >
               <LoadingBoundary loading={loadingModuleData}>
                 <HTTPAccessFallbackBoundary
-                  notFound={notFound}
+                  notFound={renderNotFoundCacheNode}
                   forbidden={forbidden}
                   unauthorized={unauthorized}
                 >
@@ -644,6 +678,7 @@ export default function OuterLayoutRouter({
                       tree={tree}
                       cacheNode={cacheNode}
                       segmentPath={segmentPath}
+                      isNotFoundSegment={false}
                     />
                   </RedirectBoundary>
                 </HTTPAccessFallbackBoundary>
