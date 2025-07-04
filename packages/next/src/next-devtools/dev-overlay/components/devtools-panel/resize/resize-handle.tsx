@@ -144,7 +144,7 @@ export const ResizeHandle = ({ direction }: { direction: ResizeDirection }) => {
     <>
       {/* this is what actually captures the events, its partially on the container, and partially off */}
       <div
-        className={`resize-container ${direction}`}
+        className={`resize-container ${direction} ${draggingDirection && draggingDirection !== direction ? 'no-hover' : ''}`}
         onMouseDown={handleMouseDown}
       />
 

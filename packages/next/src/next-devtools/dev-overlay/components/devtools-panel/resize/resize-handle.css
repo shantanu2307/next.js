@@ -143,3 +143,20 @@
 .resize-line.top.dragging {
   transform: translateY(0);
 }
+
+/* make sure that we don't show multiple handles at once
+ * we should only ever show the currently resizing handle
+ * regardless of hover state 
+ */
+.resize-container.no-hover.right:hover ~ .resize-line.right {
+  transform: translateX(-28px);
+}
+.resize-container.no-hover.left:hover ~ .resize-line.left {
+  transform: translateX(28px);
+}
+.resize-container.no-hover.bottom:hover ~ .resize-line.bottom {
+  transform: translateY(-28px);
+}
+.resize-container.no-hover.top:hover ~ .resize-line.top {
+  transform: translateY(28px);
+}
