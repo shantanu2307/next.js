@@ -1,7 +1,7 @@
 import { nextTestSetup } from 'e2e-utils'
 
 describe('react-performance-track', () => {
-  const { next } = nextTestSetup({
+  const { isTurbopack, next } = nextTestSetup({
     files: __dirname,
   })
 
@@ -21,7 +21,15 @@ describe('react-performance-track', () => {
     await browser.elementByCss('[data-react-server-requests-done]')
 
     const track = await browser.eval('window.reactServerRequests.getSnapshot()')
-    // FIXME: Should show await fetch
-    expect(track).toEqual([])
+    expect(track).toEqual([
+      {
+        // TODO: Only because we don't ignore-list in Turbopack just yet and haven't synced React.
+        name: isTurbopack ? 'fetch' : '',
+        properties: expect.arrayContaining([
+          ['status', '200'],
+          ['body', '…'],
+        ]),
+      },
+    ])
   })
 })

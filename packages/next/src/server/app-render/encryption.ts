@@ -104,9 +104,15 @@ export const encryptActionBoundArgs = React.cache(
         ? createHangingInputAbortSignal(workUnitStore)
         : undefined
 
+    const filterStackFrame =
+      process.env.NODE_ENV !== 'production'
+        ? (require('../lib/source-maps') as typeof import('../lib/source-maps'))
+            .filterStackFrameDEV
+        : undefined
     // Using Flight to serialize the args into a string.
     const serialized = await streamToString(
       renderToReadableStream(args, clientModules, {
+        filterStackFrame,
         signal: hangingInputAbortSignal,
         onError(err) {
           if (hangingInputAbortSignal?.aborted) {
