@@ -1704,7 +1704,10 @@ impl JsValue {
             }
             JsValue::WellKnownObject(obj) => {
                 let (name, explainer) = match obj {
-                    WellKnownObjectKind::GlobalObject => ("Object", "The global Object variable"),
+                    WellKnownObjectKind::GlobalObject => (
+                        "Object",
+                        "The global Object variable",
+                    ),
                     WellKnownObjectKind::PathModule | WellKnownObjectKind::PathModuleDefault => (
                         "path",
                         "The Node.js path module: https://nodejs.org/api/path.html",
@@ -1721,8 +1724,7 @@ impl JsValue {
                         "url",
                         "The Node.js url module: https://nodejs.org/api/url.html",
                     ),
-                    WellKnownObjectKind::ChildProcess
-                    | WellKnownObjectKind::ChildProcessDefault => (
+                    WellKnownObjectKind::ChildProcess | WellKnownObjectKind::ChildProcessDefault => (
                         "child_process",
                         "The Node.js child_process module: https://nodejs.org/api/child_process.html",
                     ),
@@ -1748,21 +1750,24 @@ impl JsValue {
                     ),
                     WellKnownObjectKind::NodeExpressApp => (
                         "express",
-                        "The Node.js express package: https://github.com/expressjs/express",
+                        "The Node.js express package: https://github.com/expressjs/express"
                     ),
                     WellKnownObjectKind::NodeProtobufLoader => (
                         "@grpc/proto-loader",
-                        "The Node.js @grpc/proto-loader package: https://github.com/grpc/grpc-node",
+                        "The Node.js @grpc/proto-loader package: https://github.com/grpc/grpc-node"
                     ),
                     WellKnownObjectKind::NodeBuffer => (
                         "Buffer",
-                        "The Node.js Buffer object: https://nodejs.org/api/buffer.html#class-buffer",
+                        "The Node.js Buffer object: https://nodejs.org/api/buffer.html#class-buffer"
                     ),
                     WellKnownObjectKind::RequireCache => (
                         "require.cache",
-                        "The CommonJS require.cache object: https://nodejs.org/api/modules.html#requirecache",
+                        "The CommonJS require.cache object: https://nodejs.org/api/modules.html#requirecache"
                     ),
-                    WellKnownObjectKind::ImportMeta => ("import.meta", "The import.meta object"),
+                    WellKnownObjectKind::ImportMeta => (
+                        "import.meta",
+                        "The import.meta object"
+                    ),
                 };
                 if depth > 0 {
                     let i = hints.len();
@@ -1774,7 +1779,7 @@ impl JsValue {
             }
             JsValue::WellKnownFunction(func) => {
                 let (name, explainer) = match func {
-                    WellKnownFunctionKind::ObjectAssign => (
+                   WellKnownFunctionKind::ObjectAssign => (
                         "Object.assign".to_string(),
                         "Object.assign method: https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Object/assign",
                     ),
@@ -1792,34 +1797,15 @@ impl JsValue {
                     ),
                     WellKnownFunctionKind::Import => (
                         "import".to_string(),
-                        "The dynamic import() method from the ESM specification: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#dynamic_imports",
+                        "The dynamic import() method from the ESM specification: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#dynamic_imports"
                     ),
-                    WellKnownFunctionKind::Require => {
-                        ("require".to_string(), "The require method from CommonJS")
-                    }
-                    WellKnownFunctionKind::RequireResolve => (
-                        "require.resolve".to_string(),
-                        "The require.resolve method from CommonJS",
-                    ),
-                    WellKnownFunctionKind::RequireContext => (
-                        "require.context".to_string(),
-                        "The require.context method from webpack",
-                    ),
-                    WellKnownFunctionKind::RequireContextRequire(..) => (
-                        "require.context(...)".to_string(),
-                        "The require.context(...) method from webpack: https://webpack.js.org/api/module-methods/#requirecontext",
-                    ),
-                    WellKnownFunctionKind::RequireContextRequireKeys(..) => (
-                        "require.context(...).keys".to_string(),
-                        "The require.context(...).keys method from webpack: https://webpack.js.org/guides/dependency-management/#requirecontext",
-                    ),
-                    WellKnownFunctionKind::RequireContextRequireResolve(..) => (
-                        "require.context(...).resolve".to_string(),
-                        "The require.context(...).resolve method from webpack: https://webpack.js.org/guides/dependency-management/#requirecontext",
-                    ),
-                    WellKnownFunctionKind::Define => {
-                        ("define".to_string(), "The define method from AMD")
-                    }
+                    WellKnownFunctionKind::Require => ("require".to_string(), "The require method from CommonJS"),
+                    WellKnownFunctionKind::RequireResolve => ("require.resolve".to_string(), "The require.resolve method from CommonJS"),
+                    WellKnownFunctionKind::RequireContext => ("require.context".to_string(), "The require.context method from webpack"),
+                    WellKnownFunctionKind::RequireContextRequire(..) => ("require.context(...)".to_string(), "The require.context(...) method from webpack: https://webpack.js.org/api/module-methods/#requirecontext"),
+                    WellKnownFunctionKind::RequireContextRequireKeys(..) => ("require.context(...).keys".to_string(), "The require.context(...).keys method from webpack: https://webpack.js.org/guides/dependency-management/#requirecontext"),
+                    WellKnownFunctionKind::RequireContextRequireResolve(..) => ("require.context(...).resolve".to_string(), "The require.context(...).resolve method from webpack: https://webpack.js.org/guides/dependency-management/#requirecontext"),
+                    WellKnownFunctionKind::Define => ("define".to_string(), "The define method from AMD"),
                     WellKnownFunctionKind::FsReadMethod(name) => (
                         format!("fs.{name}"),
                         "A file reading method from the Node.js fs module: https://nodejs.org/api/fs.html",
@@ -1858,43 +1844,43 @@ impl JsValue {
                     ),
                     WellKnownFunctionKind::NodeGypBuild => (
                         "node-gyp-build".to_string(),
-                        "The Node.js node-gyp-build module: https://github.com/prebuild/node-gyp-build",
+                        "The Node.js node-gyp-build module: https://github.com/prebuild/node-gyp-build"
                     ),
                     WellKnownFunctionKind::NodeBindings => (
                         "bindings".to_string(),
-                        "The Node.js bindings module: https://github.com/TooTallNate/node-bindings",
+                        "The Node.js bindings module: https://github.com/TooTallNate/node-bindings"
                     ),
                     WellKnownFunctionKind::NodeExpress => (
                         "express".to_string(),
-                        "require('express')() : https://github.com/expressjs/express",
+                        "require('express')() : https://github.com/expressjs/express"
                     ),
                     WellKnownFunctionKind::NodeExpressSet => (
                         "set".to_string(),
-                        "require('express')().set('view engine', 'jade')  https://github.com/expressjs/express",
+                        "require('express')().set('view engine', 'jade')  https://github.com/expressjs/express"
                     ),
                     WellKnownFunctionKind::NodeStrongGlobalize => (
-                        "SetRootDir".to_string(),
-                        "require('strong-globalize')()  https://github.com/strongloop/strong-globalize",
+                      "SetRootDir".to_string(),
+                      "require('strong-globalize')()  https://github.com/strongloop/strong-globalize"
                     ),
                     WellKnownFunctionKind::NodeStrongGlobalizeSetRootDir => (
-                        "SetRootDir".to_string(),
-                        "require('strong-globalize').SetRootDir(__dirname)  https://github.com/strongloop/strong-globalize",
+                      "SetRootDir".to_string(),
+                      "require('strong-globalize').SetRootDir(__dirname)  https://github.com/strongloop/strong-globalize"
                     ),
                     WellKnownFunctionKind::NodeResolveFrom => (
-                        "resolveFrom".to_string(),
-                        "require('resolve-from')(__dirname, 'node-gyp/bin/node-gyp')  https://github.com/sindresorhus/resolve-from",
+                      "resolveFrom".to_string(),
+                      "require('resolve-from')(__dirname, 'node-gyp/bin/node-gyp')  https://github.com/sindresorhus/resolve-from"
                     ),
                     WellKnownFunctionKind::NodeProtobufLoad => (
-                        "load/loadSync".to_string(),
-                        "require('@grpc/proto-loader').load(filepath, { includeDirs: [root] }) https://github.com/grpc/grpc-node",
+                      "load/loadSync".to_string(),
+                      "require('@grpc/proto-loader').load(filepath, { includeDirs: [root] }) https://github.com/grpc/grpc-node"
                     ),
                     WellKnownFunctionKind::WorkerConstructor => (
-                        "Worker".to_string(),
-                        "The standard Worker constructor: https://developer.mozilla.org/en-US/docs/Web/API/Worker/Worker",
+                      "Worker".to_string(),
+                      "The standard Worker constructor: https://developer.mozilla.org/en-US/docs/Web/API/Worker/Worker"
                     ),
                     WellKnownFunctionKind::URLConstructor => (
-                        "URL".to_string(),
-                        "The standard URL constructor: https://developer.mozilla.org/en-US/docs/Web/API/URL/URL",
+                      "URL".to_string(),
+                      "The standard URL constructor: https://developer.mozilla.org/en-US/docs/Web/API/URL/URL"
                     ),
                 };
                 if depth > 0 {
