@@ -1,7 +1,6 @@
 export default function BasicLogsPage() {
   return (
     <div>
-      <h1>Basic Logs Test</h1>
       <button
         id="log-button"
         onClick={() => {

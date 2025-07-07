@@ -148,7 +148,7 @@ function processConsoleFormatStrings(args: any[]): any[] {
 // modifiers since we apply our own custom coloring to error
 // stacks and code blocks, and otherwise it would conflict
 // and cause awful output
-function stripFormatSpecifiers(args: any[]): any[] {
+export function stripFormatSpecifiers(args: any[]): any[] {
   if (args.length === 0 || typeof args[0] !== 'string') return args
 
   const fmtIn = String(args[0])
@@ -173,9 +173,22 @@ function stripFormatSpecifiers(args: any[]): any[] {
 
     const token = fmtIn[++i]
 
+    if (!token) {
+      fmtOut += '%'
+      continue
+    }
+
     if ('csdifoOj'.includes(token) || token === 'O') {
       if (argPtr < rest.length) {
-        fmtOut += String(rest[argPtr++])
+        if (token === 'c') {
+          argPtr++
+        } else if (token === 'o' || token === 'O' || token === 'j') {
+          const obj = rest[argPtr++]
+          fmtOut += util.inspect(obj, { depth: 2, colors: false })
+        } else {
+          // string(...) is safe for remaining specifiers
+          fmtOut += String(rest[argPtr++])
+        }
       }
       continue
     }

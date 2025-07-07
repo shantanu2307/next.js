@@ -99,7 +99,7 @@ import { devIndicatorServerState } from './dev-indicator-server-state'
 import { getDisableDevIndicatorMiddleware } from '../../next-devtools/server/dev-indicator-middleware'
 import { getRestartDevServerMiddleware } from '../../next-devtools/server/restart-dev-server-middleware'
 import { backgroundLogCompilationEvents } from '../../shared/lib/turbopack/compilation-events'
-import { receiveBrowserLogsTurbopack } from './browser-logs/receieve-logs'
+import { receiveBrowserLogsTurbopack } from './browser-logs/receive-logs'
 
 const wsServer = new ws.Server({ noServer: true })
 const isTestMode = !!(

@@ -1,14 +1,20 @@
-export default function DepthLimitPage() {
+export default function DeepObjectsPage() {
   return (
     <div>
-      <h1>Depth Limit Test</h1>
       <button
+        id="deep-button"
         onClick={() => {
           const deepObj = {
             level1: {
               level2: {
                 level3: {
-                  level4: 'too deep',
+                  level4: {
+                    level5: {
+                      level6: {
+                        level7: 'this should be cut off',
+                      },
+                    },
+                  },
                 },
               },
             },

@@ -401,8 +401,7 @@ const isHMR = (args: any[]) => {
   return false
 }
 
-// server source maps test ts
-const isServerLog = (args: any[]) => {
+const isIgnoredLog = (args: any[]) => {
   if (args.length < 3) {
     return false
   }
@@ -417,7 +416,8 @@ const isServerLog = (args: any[]) => {
     return false
   }
 
-  return format.startsWith('%c%s%c') && label.trim() === 'Server'
+  // kinda hacky, we should define a common format for these strings so we can safely ignore
+  return format.startsWith('%c%s%c') && styles.includes('background:')
 }
 
 export function forwardUnhandledError(error: Error) {
@@ -442,8 +442,7 @@ export const initializeDebugLogForwarding = (router: 'app' | 'pages'): void => {
         if (isHMR(args)) {
           return
         }
-        // handle other badges
-        if (isServerLog(args)) {
+        if (isIgnoredLog(args)) {
           return
         }
         createLogEntry(method, args)

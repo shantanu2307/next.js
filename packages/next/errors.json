@@ -713,14 +713,5 @@
   "712": "`rspack.warnForEdgeRuntime` is not supported by the wasm bindings.",
   "713": "Unexpected error during process lookup",
   "714": "cannot run loadNative when `NEXT_TEST_WASM` is set",
-  "715": "Server Action \"%s\" was not found on the server. \\nRead more: https://nextjs.org/docs/messages/failed-to-find-server-action",
-  "716": "The \"%s\" argument must be of type number",
-  "717": "The \"strict\" argument must be of type boolean",
-  "718": "Converting circular structure to JSON",
-  "719": "The \"%s\" argument must be of type boolean",
-  "720": "The \"%s\" argument must be >= 1",
-  "721": "The \"%s\" argument must be an integer",
-  "722": "The \"circularValue\" argument must be of type string or the value null or undefined",
-  "723": "The \"deterministic\" argument must be of type boolean or comparator function",
-  "724": "Invariant"
+  "715": "Server Action \"%s\" was not found on the server. \\nRead more: https://nextjs.org/docs/messages/failed-to-find-server-action"
 }
