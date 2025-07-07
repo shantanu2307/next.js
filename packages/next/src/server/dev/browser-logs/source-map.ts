@@ -107,7 +107,7 @@ function preprocessStackTrace(stackTrace: string, distDir?: string): string {
 
 const cache = new LRUCache<
   Awaited<ReturnType<typeof getSourceMappedStackFramesInternal>>
->(500)
+>(25)
 async function getSourceMappedStackFramesInternal(
   stackTrace: string,
   ctx: MappingContext,
