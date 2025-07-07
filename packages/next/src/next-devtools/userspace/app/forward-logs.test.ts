@@ -78,11 +78,6 @@ describe('forward-logs serialization', () => {
 
       const arr = [1, throwingProxy, 'normal']
       const cloned = safeClone(arr)
-      console.log(
-        'what is this equal to',
-        cloned,
-        cloned[1] === UNAVAILABLE_MARKER
-      )
 
       expect(cloned).toEqual([1, UNAVAILABLE_MARKER, 'normal'])
     })
