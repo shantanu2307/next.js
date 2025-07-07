@@ -4,7 +4,10 @@ import {
   setOwnerStackIfAvailable,
 } from './errors/stitched-error'
 import { getErrorSource } from '../../../shared/lib/error-source'
-import { getTerminalLoggingConfig } from './terminal-logging-config'
+import {
+  getTerminalLoggingConfig,
+  isTerminalLoggingEnabled,
+} from './terminal-logging-config'
 import {
   type ConsoleEntry,
   type ConsoleErrorEntry,
@@ -32,6 +35,8 @@ const stringify = configure({
   maximumDepth,
   maximumBreadth,
 })
+
+const shouldForwardLogs = isTerminalLoggingEnabled()
 
 const methods: Array<LogMethod> = [
   'log',
@@ -200,6 +205,9 @@ export const logQueue: {
     })
   },
   onSocketReady: (socket: WebSocket) => {
+    if (!shouldForwardLogs) {
+      return
+    }
     if (socket.readyState !== WebSocket.OPEN) {
       // invariant
       return
