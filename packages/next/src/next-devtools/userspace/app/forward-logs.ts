@@ -58,7 +58,10 @@ const methods: Array<LogMethod> = [
  * - not read/attempt to serialize promises (next will console error if you do that, and will cause this program to infinitely recurse)
  * - if we read a proxy that throws (no way to detect if something is a proxy), explain to the user we can't read this data
  */
-export function safeClone<T>(value: T, seen = new WeakMap()): any {
+export function preLogSerializationClone<T>(
+  value: T,
+  seen = new WeakMap()
+): any {
   if (value === undefined) return UNDEFINED_MARKER
   if (value === null || typeof value !== 'object') return value
   if (seen.has(value as object)) return seen.get(value as object)
@@ -80,7 +83,7 @@ export function safeClone<T>(value: T, seen = new WeakMap()): any {
     seen.set(value, out)
     for (const item of value) {
       try {
-        out.push(safeClone(item, seen))
+        out.push(preLogSerializationClone(item, seen))
       } catch {
         out.push(UNAVAILABLE_MARKER)
       }
@@ -94,7 +97,7 @@ export function safeClone<T>(value: T, seen = new WeakMap()): any {
     seen.set(value as object, out)
     for (const key of Object.keys(value as object)) {
       try {
-        out[key] = safeClone((value as any)[key], seen)
+        out[key] = preLogSerializationClone((value as any)[key], seen)
       } catch {
         out[key] = UNAVAILABLE_MARKER
       }
@@ -277,7 +280,7 @@ const createLogEntry = (level: LogMethod, args: any[]) => {
       }
       return {
         kind: 'arg',
-        data: safeClone(arg),
+        data: preLogSerializationClone(arg),
       }
     }),
   }
@@ -313,7 +316,7 @@ export const forwardErrorLog = (args: any[]) => {
       }
       return {
         kind: 'arg',
-        data: safeClone(arg),
+        data: preLogSerializationClone(arg),
       }
     }),
   }
@@ -385,7 +388,7 @@ const createUnhandledRejectionNonErrorEntry = (reason: unknown) => {
       },
       {
         kind: 'arg',
-        data: safeClone(reason),
+        data: preLogSerializationClone(reason),
       },
     ],
   }

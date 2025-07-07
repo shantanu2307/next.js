@@ -44,6 +44,7 @@ describe(`Terminal Logging (${bundlerName})`, () => {
     let next: NextInstance
     let logs: string[] = []
     let logCapture: ReturnType<typeof setupLogCapture>
+    let browser = null
 
     beforeAll(async () => {
       logCapture = setupLogCapture()
@@ -72,8 +73,15 @@ describe(`Terminal Logging (${bundlerName})`, () => {
       logCapture.clearLogs()
     })
 
+    afterEach(async () => {
+      if (browser) {
+        await browser.close()
+        browser = null
+      }
+    })
+
     it('should forward client component logs', async () => {
-      const browser = await webdriver(next.url, '/pages-client-log')
+      browser = await webdriver(next.url, '/pages-client-log')
       await browser.waitForElementByCss('#log-button')
       await browser.elementByCss('#log-button').click()
 
@@ -83,12 +91,10 @@ describe(`Terminal Logging (${bundlerName})`, () => {
           '[browser] Log from pages router client component'
         )
       })
-
-      await browser.close()
     })
 
     it('should handle circular references safely', async () => {
-      const browser = await webdriver(next.url, '/circular-refs')
+      browser = await webdriver(next.url, '/circular-refs')
       await browser.waitForElementByCss('#circular-button')
       await browser.elementByCss('#circular-button').click()
 
@@ -97,12 +103,10 @@ describe(`Terminal Logging (${bundlerName})`, () => {
         expect(logOutput).toContain('[browser] Circular object:')
         expect(logOutput).toContain('[Circular]')
       })
-
-      await browser.close()
     })
 
     it('should respect default depth limit', async () => {
-      const browser = await webdriver(next.url, '/deep-objects')
+      browser = await webdriver(next.url, '/deep-objects')
       await browser.waitForElementByCss('#deep-button')
       await browser.elementByCss('#deep-button').click()
 
@@ -113,12 +117,10 @@ describe(`Terminal Logging (${bundlerName})`, () => {
         expect(logOutput).toContain('level2: { level3: { level4: { level5:')
         expect(logOutput).toContain("'[Object]'")
       })
-
-      await browser.close()
     })
 
     it('should show source-mapped errors in pages router', async () => {
-      const browser = await webdriver(next.url, '/pages-client-error')
+      browser = await webdriver(next.url, '/pages-client-error')
       await browser.waitForElementByCss('#error-button')
 
       logCapture.clearLogs()
@@ -135,8 +137,6 @@ describe(`Terminal Logging (${bundlerName})`, () => {
           /at callClientError \(.*pages-client-error\.js:6:\d+\)/
         )
       })
-
-      await browser.close()
     })
 
     it('should show source-mapped errors for server errors from pages router ', async () => {
@@ -359,6 +359,7 @@ describe(`Terminal Logging (${bundlerName})`, () => {
       let next: NextInstance
       let logs: string[] = []
       let logCapture: ReturnType<typeof setupLogCapture>
+      let browser = null
 
       beforeAll(async () => {
         logCapture = setupLogCapture()
@@ -389,8 +390,15 @@ describe(`Terminal Logging (${bundlerName})`, () => {
         logCapture.clearLogs()
       })
 
+      afterEach(async () => {
+        if (browser) {
+          await browser.close()
+          browser = null
+        }
+      })
+
       it('should omit source location when disabled', async () => {
-        const browser = await webdriver(next.url, '/basic-logs')
+        browser = await webdriver(next.url, '/basic-logs')
 
         await browser.waitForElementByCss('#log-button')
         await browser.elementByCss('#log-button').click()
@@ -400,8 +408,6 @@ describe(`Terminal Logging (${bundlerName})`, () => {
           expect(logOutput).toContain('[browser] Hello from browser')
           expect(logOutput).not.toMatch(/\([^)]+basic-logs\.[jt]sx?:\d+:\d+\)/)
         })
-
-        await browser.close()
       })
     })
   })
