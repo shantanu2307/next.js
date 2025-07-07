@@ -17,7 +17,7 @@ module.exports =
               ? `./analyze/client.html`
               : `../${options.nextRuntime === 'nodejs' ? '../' : ''}analyze/${
                   options.nextRuntime
-                }${analyzerMode==="json" ? "json":"html"}`,
+                }${analyzerMode==="json" ? ".json":".html"}`,
           })
         )
 
