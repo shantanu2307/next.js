@@ -777,7 +777,6 @@ export default async function getBaseWebpackConfig(
       appDir,
       dir,
       reactProductionProfiling,
-      hasRewrites,
     }),
     ...(isClient
       ? {
@@ -1988,6 +1987,7 @@ export default async function getBaseWebpackConfig(
           isNodeServer,
           middlewareMatchers,
           omitNonDeterministic: isCompileMode,
+          rewrites,
         })
       ),
       isClient &&

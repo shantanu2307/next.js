@@ -69,6 +69,7 @@ export function DevToolsIndicator({
       isTurbopack={!!process.env.TURBOPACK}
       disabled={state.disableDevIndicator || !isDevToolsIndicatorVisible}
       isBuildError={isBuildError}
+      page={state.page}
       {...props}
     />
   )
@@ -110,6 +111,7 @@ function DevToolsPopover({
   dispatch,
   scale,
   setScale,
+  page,
 }: {
   routerType: 'pages' | 'app'
   disabled: boolean
@@ -125,6 +127,7 @@ function DevToolsPopover({
   dispatch: OverlayDispatch
   scale: DevToolsScale
   setScale: (value: DevToolsScale) => void
+  page: string
 }) {
   const rootRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -293,7 +296,6 @@ function DevToolsPopover({
           '--animate-out-duration-ms': `${MENU_DURATION_MS}ms`,
           '--animate-out-timing-function': MENU_CURVE,
           boxShadow: 'none',
-          zIndex: 2147483647,
           [vertical]: `${INDICATOR_PADDING}px`,
           [horizontal]: `${INDICATOR_PADDING}px`,
         } as CSSProperties
@@ -368,8 +370,7 @@ function DevToolsPopover({
           triggerRef={triggerRef}
           style={popover}
           routerType={routerType}
-          // dummy page for legacy segment explorer, will be removed in the future
-          page={''}
+          page={page}
         />
       ) : null}
 
@@ -566,7 +567,7 @@ export const DEV_TOOLS_INDICATOR_STYLES = `
     border-radius: var(--rounded-xl);
     position: absolute;
     font-family: var(--font-stack-sans);
-    z-index: 1000;
+    z-index: 3;
     overflow: hidden;
     opacity: 0;
     outline: 0;
