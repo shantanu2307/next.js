@@ -116,6 +116,46 @@ describe(`Terminal Logging (${bundlerName})`, () => {
 
       await browser.close()
     })
+
+    it('should show source-mapped errors in pages router', async () => {
+      const browser = await webdriver(next.url, '/pages-client-error')
+      await browser.waitForElementByCss('#error-button')
+
+      logCapture.clearLogs()
+
+      await browser.elementByCss('#error-button').click()
+
+      await retry(() => {
+        const logOutput = logs.join('\n')
+        expect(logOutput).toContain('Error: Client error in pages router')
+        expect(logOutput).toMatch(
+          /at throwClientError \(.*pages-client-error\.js:2:\d+\)/
+        )
+        expect(logOutput).toMatch(
+          /at callClientError \(.*pages-client-error\.js:6:\d+\)/
+        )
+      })
+
+      await browser.close()
+    })
+
+    it('should show source-mapped errors for server errors from pages router ', async () => {
+      const outputIndex = logs.length
+
+      const response = await next.fetch('/pages-server-error')
+      expect(response.status).toBe(500)
+
+      await retry(() => {
+        const newLogs = logs.slice(outputIndex).join('\n')
+        expect(newLogs).toContain('Error: Server error in pages router')
+        expect(newLogs).toMatch(
+          /at throwPagesServerError \(.*pages-server-error\.js:2:\d+\)/
+        )
+        expect(newLogs).toMatch(
+          /at callPagesServerError \(.*pages-server-error\.js:6:\d+\)/
+        )
+      })
+    })
   })
 
   describe('App Router - Server Components', () => {
@@ -164,6 +204,24 @@ describe(`Terminal Logging (${bundlerName})`, () => {
       expect(newLogs).not.toContain('[browser] Server component console.log')
       expect(newLogs).not.toContain('[browser] Server component console.error')
     })
+
+    it('should show source-mapped errors for server components', async () => {
+      const outputIndex = logs.length
+
+      const response = await next.fetch('/server-error')
+      expect(response.status).toBe(500)
+
+      await retry(() => {
+        const newLogs = logs.slice(outputIndex).join('\n')
+        expect(newLogs).toContain('Error: Server component error in app router')
+        expect(newLogs).toMatch(
+          /at throwServerError \(.*server-error\/page\.js:2:\d+\)/
+        )
+        expect(newLogs).toMatch(
+          /at callServerError \(.*server-error\/page\.js:6:\d+\)/
+        )
+      })
+    })
   })
 
   describe('App Router - Client Components', () => {
@@ -207,6 +265,30 @@ describe(`Terminal Logging (${bundlerName})`, () => {
         const logOutput = logs.join('')
         expect(logOutput).toContain(
           '[browser] Client component log from app router'
+        )
+      })
+
+      await browser.close()
+    })
+
+    it('should show source-mapped errors for client components', async () => {
+      const browser = await webdriver(next.url, '/client-error')
+      await browser.waitForElementByCss('#error-button')
+
+      logCapture.clearLogs()
+
+      await browser.elementByCss('#error-button').click()
+
+      await retry(() => {
+        const logOutput = logs.join('\n')
+        expect(logOutput).toContain(
+          'Error: Client component error in app router'
+        )
+        expect(logOutput).toMatch(
+          /at throwError \(.*client-error\/page\.js:4:\d+\)/
+        )
+        expect(logOutput).toMatch(
+          /at callError \(.*client-error\/page\.js:8:\d+\)/
         )
       })
 
