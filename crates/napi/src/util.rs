@@ -148,10 +148,7 @@ pub fn log_internal_error_and_inform(internal_error: &anyhow::Error) {
         format!(
             "clicking here: https://github.com/vercel/next.js/discussions/new?category=turbopack-error-report&title={}&body={}&labels=Turbopack,Turbopack%20Panic%20Backtrace",
             &urlencoding::encode(&title),
-            &urlencoding::encode(&format!(
-                "{}\n\nError message:\n```\n{}\n```",
-                &version_str, &title
-            ))
+            &urlencoding::encode(&format!("{}\n\nError message:\n```\n{}\n```", &version_str, &title))
         )
     };
 
