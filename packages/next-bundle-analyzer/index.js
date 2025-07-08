@@ -5,7 +5,7 @@ module.exports =
       return nextConfig
     }
 
-    const extension = analyzerMode==="json" ? ".json":".html"; 
+    const extension = analyzerMode === 'json' ? '.json' : '.html'
 
     return Object.assign({}, nextConfig, {
       webpack(config, options) {
